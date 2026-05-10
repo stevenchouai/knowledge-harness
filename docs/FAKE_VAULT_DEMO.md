@@ -30,6 +30,18 @@ Use the printed `prompt_file` and `metadata_file` paths to inspect the evidence.
 The command does not read `config/harness.json`, does not edit it, and does not
 invoke Codex.
 
+For a browser-friendly static proof receipt, run:
+
+```bash
+knowledge-harness demo --html
+```
+
+The HTML output is self-contained: inline styles only, no scripts, no external
+assets, and no network-loading links. It shows the command, fake vault path, run
+directory, prompt file, metadata file, safety claims, evidence checklist, and
+cleanup command. A committed sanitized sample is available at
+[examples/demo-receipt.html](../examples/demo-receipt.html).
+
 For a copy/pasteable Markdown proof receipt, run:
 
 ```bash

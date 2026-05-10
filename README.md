@@ -46,6 +46,16 @@ knowledge-harness demo
 The demo creates a temporary fake vault, assembles a dry-run prompt, writes
 temporary run metadata, and prints the evidence paths. It does not read a real
 Obsidian vault, does not require Codex, and does not edit `config/harness.json`.
+For a quick browser-friendly proof card, use:
+
+```bash
+knowledge-harness demo --html
+```
+
+It prints a static, self-contained HTML receipt with the command, fake vault
+path, run paths, safety claims, evidence checklist, and cleanup command. The
+committed public-safe sample is [examples/demo-receipt.html](examples/demo-receipt.html).
+
 For a copy/pasteable proof receipt in a README, issue, or audit note, use:
 
 ```bash
