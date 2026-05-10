@@ -4,6 +4,7 @@ import argparse
 import io
 import json
 import os
+import shlex
 import subprocess
 import sys
 import textwrap
@@ -283,7 +284,28 @@ def verify_demo_evidence(demo_root: Path, fake_vault: Path, run_path: Path) -> N
             raise SystemExit(f"Demo prompt is missing fake vault content: {prompt_path}")
 
 
-def run_demo(repo_root: Path, demo_root: Path | None = None) -> int:
+def build_demo_receipt(demo_root: Path, fake_vault: Path, run_path: Path) -> dict[str, object]:
+    return {
+        "fake_vault": str(fake_vault),
+        "run_dir": str(run_path),
+        "prompt_file": str(run_path / "prompt.txt"),
+        "metadata_file": str(run_path / "run.json"),
+        "status": "no real vault or Codex was used",
+        "real_vault_used": False,
+        "codex_used": False,
+        "write_output": False,
+        "dry_run": True,
+        "cleanup_root": str(demo_root),
+        "cleanup_command": f"rm -rf {shlex.quote(str(demo_root))}",
+    }
+
+
+def run_demo(
+    repo_root: Path,
+    demo_root: Path | None = None,
+    *,
+    json_output: bool = False,
+) -> int:
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
     else:
@@ -314,15 +336,18 @@ def run_demo(repo_root: Path, demo_root: Path | None = None) -> int:
 
     run_path = latest_run_path(run_root)
     verify_demo_evidence(demo_root, fake_vault, run_path)
-    prompt_path = run_path / "prompt.txt"
-    metadata_path = run_path / "run.json"
+    receipt = build_demo_receipt(demo_root, fake_vault, run_path)
+    if json_output:
+        print(json.dumps(receipt, ensure_ascii=False, indent=2))
+        return 0
+
     print("knowledge-harness demo")
-    print(f"fake_vault: {fake_vault}")
-    print(f"run_dir: {run_path}")
-    print(f"prompt_file: {prompt_path}")
-    print(f"metadata_file: {metadata_path}")
-    print("status: no real vault or Codex was used")
-    print(f"cleanup: rm -rf {demo_root}")
+    print(f"fake_vault: {receipt['fake_vault']}")
+    print(f"run_dir: {receipt['run_dir']}")
+    print(f"prompt_file: {receipt['prompt_file']}")
+    print(f"metadata_file: {receipt['metadata_file']}")
+    print(f"status: {receipt['status']}")
+    print(f"cleanup: {receipt['cleanup_command']}")
     return 0
 
 
@@ -583,6 +608,12 @@ def build_parser() -> argparse.ArgumentParser:
         "demo",
         help="Run a public-safe fake vault dry run without Codex or local config edits.",
     )
+    demo.add_argument(
+        "--json",
+        action="store_true",
+        dest="json_output",
+        help="Print a machine-readable proof receipt instead of human-readable output.",
+    )
     demo.set_defaults(handler="demo")
 
     prompt = subparsers.add_parser(
@@ -685,7 +716,7 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[2]
 
     if args.handler == "demo":
-        return run_demo(repo_root)
+        return run_demo(repo_root, json_output=args.json_output)
 
     config = load_config(repo_root)
 

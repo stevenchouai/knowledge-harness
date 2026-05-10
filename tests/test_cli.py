@@ -3,6 +3,9 @@ from __future__ import annotations
 import io
 import json
 import os
+import shlex
+import shutil
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -531,6 +534,13 @@ class DemoCommandTests(unittest.TestCase):
         args = cli.build_parser().parse_args(["demo"])
 
         self.assertEqual(args.handler, "demo")
+        self.assertFalse(args.json_output)
+
+    def test_parser_accepts_demo_json(self) -> None:
+        args = cli.build_parser().parse_args(["demo", "--json"])
+
+        self.assertEqual(args.handler, "demo")
+        self.assertTrue(args.json_output)
 
     def test_main_demo_bypasses_local_config_loading(self) -> None:
         with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
@@ -539,6 +549,15 @@ class DemoCommandTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         run_demo.assert_called_once()
+
+    def test_main_demo_json_bypasses_local_config_loading(self) -> None:
+        with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
+            with patch.object(cli, "run_demo", return_value=0) as run_demo:
+                result = cli.main(["demo", "--json"])
+
+        self.assertEqual(result, 0)
+        run_demo.assert_called_once()
+        self.assertTrue(run_demo.call_args.kwargs["json_output"])
 
     def test_demo_creates_temporary_fake_vault_prompt_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -591,6 +610,86 @@ class DemoCommandTests(unittest.TestCase):
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
             self.assertFalse((demo_root / "missing-codex").exists())
+
+    def test_demo_json_prints_machine_readable_safe_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo with spaces"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    json_output=True,
+                )
+
+            self.assertEqual(result, 0)
+            receipt = json.loads(output.getvalue())
+            fake_vault = demo_root / "fake-vault"
+            run_path = Path(receipt["run_dir"])
+            prompt_path = Path(receipt["prompt_file"])
+            metadata_path = Path(receipt["metadata_file"])
+
+            self.assertEqual(receipt["fake_vault"], str(fake_vault))
+            self.assertEqual(prompt_path, run_path / "prompt.txt")
+            self.assertEqual(metadata_path, run_path / "run.json")
+            self.assertEqual(receipt["status"], "no real vault or Codex was used")
+            self.assertFalse(receipt["real_vault_used"])
+            self.assertFalse(receipt["codex_used"])
+            self.assertFalse(receipt["write_output"])
+            self.assertTrue(receipt["dry_run"])
+            self.assertEqual(receipt["cleanup_root"], str(demo_root))
+            self.assertEqual(
+                receipt["cleanup_command"], f"rm -rf {shlex.quote(str(demo_root))}"
+            )
+
+            for key in ("fake_vault", "run_dir", "prompt_file", "metadata_file"):
+                Path(receipt[key]).relative_to(demo_root)
+
+            self.assertEqual(
+                sorted(
+                    path.relative_to(fake_vault).as_posix()
+                    for path in fake_vault.rglob("*")
+                    if path.is_file()
+                ),
+                ["AGENTS.md", "PROMPTS.md", "wiki/_index.md"],
+            )
+            self.assertTrue(prompt_path.exists())
+            self.assertTrue(metadata_path.exists())
+            self.assertFalse((run_path / "last_message.txt").exists())
+
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertNotIn("--add-dir", metadata["command"])
+            self.assertNotIn(str(fake_vault), metadata["command"])
+
+    def test_module_demo_json_invocation_does_not_need_config_or_codex(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "knowledge_harness.cli", "demo", "--json"],
+            cwd=repo_root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        receipt = json.loads(proc.stdout)
+        self.assertFalse(receipt["real_vault_used"])
+        self.assertFalse(receipt["codex_used"])
+        self.assertFalse(receipt["write_output"])
+        self.assertTrue(receipt["dry_run"])
+        self.assertTrue(Path(receipt["prompt_file"]).exists())
+        self.assertTrue(Path(receipt["metadata_file"]).exists())
+        shutil.rmtree(Path(receipt["fake_vault"]).parent)
 
     def test_demo_does_not_mutate_local_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

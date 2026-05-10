@@ -46,6 +46,29 @@ knowledge-harness demo
 The demo creates a temporary fake vault, assembles a dry-run prompt, writes
 temporary run metadata, and prints the evidence paths. It does not read a real
 Obsidian vault, does not require Codex, and does not edit `config/harness.json`.
+For a copy/pasteable proof receipt, use:
+
+```bash
+knowledge-harness demo --json
+```
+
+It prints JSON like:
+
+```json
+{
+  "fake_vault": "/tmp/knowledge-harness-demo-.../fake-vault",
+  "run_dir": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS",
+  "prompt_file": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/prompt.txt",
+  "metadata_file": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/run.json",
+  "status": "no real vault or Codex was used",
+  "real_vault_used": false,
+  "codex_used": false,
+  "write_output": false,
+  "dry_run": true,
+  "cleanup_root": "/tmp/knowledge-harness-demo-...",
+  "cleanup_command": "rm -rf /tmp/knowledge-harness-demo-..."
+}
+```
 
 For local use with a real vault, copy the example config and edit the private
 paths on your machine:

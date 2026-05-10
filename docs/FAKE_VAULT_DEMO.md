@@ -30,6 +30,30 @@ Use the printed `prompt_file` and `metadata_file` paths to inspect the evidence.
 The command does not read `config/harness.json`, does not edit it, and does not
 invoke Codex.
 
+For a machine-readable proof receipt, run:
+
+```bash
+knowledge-harness demo --json
+```
+
+Expected output is JSON like:
+
+```json
+{
+  "fake_vault": "/tmp/knowledge-harness-demo-.../fake-vault",
+  "run_dir": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS",
+  "prompt_file": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/prompt.txt",
+  "metadata_file": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/run.json",
+  "status": "no real vault or Codex was used",
+  "real_vault_used": false,
+  "codex_used": false,
+  "write_output": false,
+  "dry_run": true,
+  "cleanup_root": "/tmp/knowledge-harness-demo-...",
+  "cleanup_command": "rm -rf /tmp/knowledge-harness-demo-..."
+}
+```
+
 ## Manual walkthrough
 
 This older walkthrough is for people who want to see the config-based path by
