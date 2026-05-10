@@ -1,0 +1,6 @@
+{
+  "vault_path": "/path/to/your/obsidian-vault",
+  "codex_path": "/path/to/codex",
+  "model": "gpt-5.4",
+  "run_dir": "./runs"
+}
