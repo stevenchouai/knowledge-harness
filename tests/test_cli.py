@@ -173,7 +173,37 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
             self.assertTrue(metadata["dry_run"])
             self.assertEqual(metadata["language"], "zh")
+            self.assertEqual(metadata["model"], "test-model")
             self.assertEqual(metadata["command"][0], str(config.codex_path))
+            model_index = metadata["command"].index("--model")
+            self.assertEqual(metadata["command"][model_index + 1], "test-model")
+
+    def test_query_model_override_updates_command_and_metadata_for_one_run(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config = self.make_config(root, self.make_vault(root))
+
+            with redirect_stdout(io.StringIO()):
+                result = cli.run_query(
+                    repo_root=repo_root,
+                    config=config,
+                    question="What should the harness do next?",
+                    output_name=None,
+                    write_output=False,
+                    dry_run=True,
+                    model="override-model",
+                )
+
+            self.assertEqual(result, 0)
+            self.assertEqual(config.model, "test-model")
+            run_dirs = list(config.run_dir.iterdir())
+            self.assertEqual(len(run_dirs), 1)
+            metadata = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["model"], "override-model")
+            model_index = metadata["command"].index("--model")
+            self.assertEqual(metadata["command"][model_index + 1], "override-model")
 
     def test_dry_run_does_not_modify_fake_vault_or_create_output(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -383,6 +413,12 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
 
         self.assertEqual(args.handler, "query")
         self.assertEqual(args.language, "en")
+
+    def test_parser_accepts_query_model_override(self) -> None:
+        args = cli.build_parser().parse_args(["query", "question", "--model", "model-x"])
+
+        self.assertEqual(args.handler, "query")
+        self.assertEqual(args.model, "model-x")
 
     def test_parser_rejects_invalid_query_language(self) -> None:
         with redirect_stderr(io.StringIO()):

@@ -81,6 +81,7 @@ knowledge-harness config
 knowledge-harness vault-health
 knowledge-harness prompt "基于现有知识库，总结 Steven 当前最值得强化的一个能力杠杆"
 knowledge-harness query "基于现有知识库，总结 Steven 当前最值得强化的一个能力杠杆"
+knowledge-harness query --model gpt-5.4-mini "用另一个模型跑一次临时实验"
 knowledge-harness prompt --language en "Summarize the next capability leverage point from the knowledge base"
 ```
 

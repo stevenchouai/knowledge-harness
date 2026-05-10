@@ -522,7 +522,15 @@ def run_query(
     write_output: bool,
     dry_run: bool,
     language: str = "zh",
+    model: str | None = None,
 ) -> int:
+    if model is not None:
+        config = HarnessConfig(
+            vault_path=config.vault_path,
+            codex_path=config.codex_path,
+            model=model,
+            run_dir=config.run_dir,
+        )
     output_name = validate_output_name(output_name)
     if dry_run:
         ensure_vault_contract(config)
@@ -551,6 +559,7 @@ def run_query(
         "write_output": write_output,
         "dry_run": dry_run,
         "language": language,
+        "model": config.model,
         "command": cmd,
     }
     (run_path / "run.json").write_text(
@@ -695,6 +704,10 @@ def build_parser() -> argparse.ArgumentParser:
         default="zh",
         help="Answer language for the assembled prompt. Default: zh.",
     )
+    query.add_argument(
+        "--model",
+        help="Override the configured Codex model for this query invocation.",
+    )
     query.set_defaults(handler="query")
 
     return parser
@@ -760,6 +773,7 @@ def main(argv: list[str] | None = None) -> int:
             write_output=args.write_output,
             dry_run=args.dry_run,
             language=args.language,
+            model=args.model,
         )
 
     parser.error(f"Unknown handler: {args.handler}")
