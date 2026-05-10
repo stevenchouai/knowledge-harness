@@ -300,11 +300,52 @@ def build_demo_receipt(demo_root: Path, fake_vault: Path, run_path: Path) -> dic
     }
 
 
+def format_demo_markdown_receipt(receipt: dict[str, object]) -> str:
+    safety_claims = (
+        ("real_vault_used", receipt["real_vault_used"]),
+        ("codex_used", receipt["codex_used"]),
+        ("write_output", receipt["write_output"]),
+        ("dry_run", receipt["dry_run"]),
+    )
+    safety_lines = [
+        f"- `{key}={str(value).lower()}`" for key, value in safety_claims
+    ]
+    lines = [
+        "# knowledge-harness demo receipt",
+        "",
+        "command: `knowledge-harness demo --markdown`",
+        "",
+        "## Paths",
+        "",
+        f"- fake_vault: `{receipt['fake_vault']}`",
+        f"- run_dir: `{receipt['run_dir']}`",
+        f"- prompt_file: `{receipt['prompt_file']}`",
+        f"- metadata_file: `{receipt['metadata_file']}`",
+        "",
+        "## Safety claims",
+        "",
+        *safety_lines,
+        "",
+        "## Evidence to check",
+        "",
+        "- `prompt_file` contains the fake vault contracts and demo question.",
+        "- `metadata_file` records `dry_run=true` and `write_output=false`.",
+        "- `metadata_file` records a missing demo Codex path and no `--add-dir` vault grant.",
+        "- `run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.",
+        "",
+        "## Cleanup",
+        "",
+        f"cleanup_command: `{receipt['cleanup_command']}`",
+    ]
+    return "\n".join(lines)
+
+
 def run_demo(
     repo_root: Path,
     demo_root: Path | None = None,
     *,
     json_output: bool = False,
+    markdown_output: bool = False,
 ) -> int:
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
@@ -339,6 +380,9 @@ def run_demo(
     receipt = build_demo_receipt(demo_root, fake_vault, run_path)
     if json_output:
         print(json.dumps(receipt, ensure_ascii=False, indent=2))
+        return 0
+    if markdown_output:
+        print(format_demo_markdown_receipt(receipt))
         return 0
 
     print("knowledge-harness demo")
@@ -617,11 +661,18 @@ def build_parser() -> argparse.ArgumentParser:
         "demo",
         help="Run a public-safe fake vault dry run without Codex or local config edits.",
     )
-    demo.add_argument(
+    demo_output = demo.add_mutually_exclusive_group()
+    demo_output.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
         help="Print a machine-readable proof receipt instead of human-readable output.",
+    )
+    demo_output.add_argument(
+        "--markdown",
+        action="store_true",
+        dest="markdown_output",
+        help="Print a copy/pasteable Markdown proof receipt instead of human-readable output.",
     )
     demo.set_defaults(handler="demo")
 
@@ -729,7 +780,11 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[2]
 
     if args.handler == "demo":
-        return run_demo(repo_root, json_output=args.json_output)
+        return run_demo(
+            repo_root,
+            json_output=args.json_output,
+            markdown_output=args.markdown_output,
+        )
 
     config = load_config(repo_root)
 

@@ -571,12 +571,26 @@ class DemoCommandTests(unittest.TestCase):
 
         self.assertEqual(args.handler, "demo")
         self.assertFalse(args.json_output)
+        self.assertFalse(args.markdown_output)
 
     def test_parser_accepts_demo_json(self) -> None:
         args = cli.build_parser().parse_args(["demo", "--json"])
 
         self.assertEqual(args.handler, "demo")
         self.assertTrue(args.json_output)
+        self.assertFalse(args.markdown_output)
+
+    def test_parser_accepts_demo_markdown(self) -> None:
+        args = cli.build_parser().parse_args(["demo", "--markdown"])
+
+        self.assertEqual(args.handler, "demo")
+        self.assertFalse(args.json_output)
+        self.assertTrue(args.markdown_output)
+
+    def test_parser_rejects_demo_json_and_markdown_together(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(["demo", "--json", "--markdown"])
 
     def test_main_demo_bypasses_local_config_loading(self) -> None:
         with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
@@ -594,6 +608,17 @@ class DemoCommandTests(unittest.TestCase):
         self.assertEqual(result, 0)
         run_demo.assert_called_once()
         self.assertTrue(run_demo.call_args.kwargs["json_output"])
+        self.assertFalse(run_demo.call_args.kwargs["markdown_output"])
+
+    def test_main_demo_markdown_bypasses_local_config_loading(self) -> None:
+        with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
+            with patch.object(cli, "run_demo", return_value=0) as run_demo:
+                result = cli.main(["demo", "--markdown"])
+
+        self.assertEqual(result, 0)
+        run_demo.assert_called_once()
+        self.assertFalse(run_demo.call_args.kwargs["json_output"])
+        self.assertTrue(run_demo.call_args.kwargs["markdown_output"])
 
     def test_demo_creates_temporary_fake_vault_prompt_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -703,6 +728,55 @@ class DemoCommandTests(unittest.TestCase):
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
 
+    def test_demo_markdown_prints_copy_pasteable_safe_receipt(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo with spaces"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    markdown_output=True,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            fake_vault = demo_root / "fake-vault"
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            prompt_path = run_path / "prompt.txt"
+            metadata_path = run_path / "run.json"
+
+            self.assertIn("# knowledge-harness demo receipt", text)
+            self.assertIn("command: `knowledge-harness demo --markdown`", text)
+            self.assertIn(f"- fake_vault: `{fake_vault}`", text)
+            self.assertIn(f"- run_dir: `{run_path}`", text)
+            self.assertIn(f"- prompt_file: `{prompt_path}`", text)
+            self.assertIn(f"- metadata_file: `{metadata_path}`", text)
+            self.assertIn("`real_vault_used=false`", text)
+            self.assertIn("`codex_used=false`", text)
+            self.assertIn("`write_output=false`", text)
+            self.assertIn("`dry_run=true`", text)
+            self.assertIn("## Evidence to check", text)
+            self.assertIn("no `--add-dir` vault grant", text)
+            self.assertIn(
+                f"cleanup_command: `rm -rf {shlex.quote(str(demo_root))}`",
+                text,
+            )
+
+            self.assertTrue(prompt_path.exists())
+            self.assertTrue(metadata_path.exists())
+            self.assertFalse((run_path / "last_message.txt").exists())
+
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertNotIn("--add-dir", metadata["command"])
+            self.assertNotIn(str(fake_vault), metadata["command"])
+
     def test_module_demo_json_invocation_does_not_need_config_or_codex(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
         env = os.environ.copy()
@@ -726,6 +800,44 @@ class DemoCommandTests(unittest.TestCase):
         self.assertTrue(Path(receipt["prompt_file"]).exists())
         self.assertTrue(Path(receipt["metadata_file"]).exists())
         shutil.rmtree(Path(receipt["fake_vault"]).parent)
+
+    def test_module_demo_markdown_invocation_does_not_need_config_or_codex(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        proc = subprocess.run(
+            [sys.executable, "-m", "knowledge_harness.cli", "demo", "--markdown"],
+            cwd=repo_root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("command: `knowledge-harness demo --markdown`", proc.stdout)
+        self.assertIn("`real_vault_used=false`", proc.stdout)
+        self.assertIn("`codex_used=false`", proc.stdout)
+        self.assertIn("`write_output=false`", proc.stdout)
+        self.assertIn("`dry_run=true`", proc.stdout)
+
+        fake_vault_line = next(
+            line for line in proc.stdout.splitlines() if line.startswith("- fake_vault:")
+        )
+        prompt_line = next(
+            line for line in proc.stdout.splitlines() if line.startswith("- prompt_file:")
+        )
+        metadata_line = next(
+            line for line in proc.stdout.splitlines() if line.startswith("- metadata_file:")
+        )
+        fake_vault = Path(fake_vault_line.split("`")[1])
+        prompt_path = Path(prompt_line.split("`")[1])
+        metadata_path = Path(metadata_line.split("`")[1])
+
+        self.assertTrue(prompt_path.exists())
+        self.assertTrue(metadata_path.exists())
+        shutil.rmtree(fake_vault.parent)
 
     def test_demo_does_not_mutate_local_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
