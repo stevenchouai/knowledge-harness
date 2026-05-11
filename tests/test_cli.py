@@ -1174,6 +1174,42 @@ class DemoCommandTests(unittest.TestCase):
             self.assertEqual(config_path.read_text(encoding="utf-8"), config_text)
 
 
+class ExampleHubTests(unittest.TestCase):
+    def test_demo_hub_is_linked_from_readme(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        readme = (repo_root / "README.md").read_text(encoding="utf-8")
+
+        self.assertIn("[examples/index.html](examples/index.html)", readme)
+
+    def test_demo_hub_links_only_to_existing_example_pages(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        examples_dir = repo_root / "examples"
+        index_path = examples_dir / "index.html"
+
+        self.assertTrue(index_path.exists())
+        text = index_path.read_text(encoding="utf-8")
+        hrefs = re.findall(r'\bhref="([^"]+)"', text)
+
+        self.assertEqual(
+            sorted(hrefs),
+            sorted(
+                [
+                    "one-minute-demo.html",
+                    "visitor-tour.html",
+                    "demo-receipt.html",
+                ]
+            ),
+        )
+        for href in hrefs:
+            with self.subTest(href=href):
+                self.assertFalse(href.startswith(("/", "#")))
+                self.assertNotIn(":", href)
+                target = (examples_dir / href).resolve()
+                target.relative_to(examples_dir.resolve())
+                self.assertEqual(target.suffix, ".html")
+                self.assertTrue(target.is_file())
+
+
 class VisitorTourTests(unittest.TestCase):
     def read_repo_file(self, relative_path: str) -> str:
         repo_root = Path(__file__).resolve().parents[1]

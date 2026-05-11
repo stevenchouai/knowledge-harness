@@ -43,6 +43,9 @@ python3 -m pip install -e .
 knowledge-harness demo
 ```
 
+No Python yet? Open [examples/index.html](examples/index.html) in a browser for
+the easiest public-safe demo path.
+
 The demo creates a temporary fake vault, assembles a dry-run prompt, writes
 temporary run metadata, and prints the evidence paths. It does not read a real
 Obsidian vault, does not require Codex, and does not edit `config/harness.json`.
