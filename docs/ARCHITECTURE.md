@@ -75,6 +75,13 @@ The harness does four quiet jobs:
   - did it over-read or under-read
   - did it create a reusable output
 
+### Run metadata contract
+
+Every new `run.json` written by `run_query` includes `schema_version: 1`.
+Version 1 means the receipt records the question, output name, write gate,
+dry-run flag, answer language, model, and prepared Codex command. Runs that
+actually execute Codex also add the subprocess exit code and completion time.
+
 ### Layer 3: Reflection loop
 
 This is where the harness "grows", but in a controlled way.

@@ -22,6 +22,7 @@ from knowledge_harness.vault_health import VaultHealthReport, scan_vault_health
 DEFAULT_VAULT = Path("~/Obsidian/KnowledgeVault")
 DEFAULT_CODEX = Path("/Applications/Codex.app/Contents/Resources/codex")
 DEFAULT_MODEL = "gpt-5.4"
+RUN_METADATA_SCHEMA_VERSION = 1
 LANGUAGE_CHOICES = ("zh", "en")
 DEMO_QUESTION = "How does this harness route a public-safe question?"
 DEMO_AGENTS = """# AGENTS.md
@@ -554,6 +555,7 @@ def run_query(
     )
 
     metadata = {
+        "schema_version": RUN_METADATA_SCHEMA_VERSION,
         "question": question,
         "output_name": output_name,
         "write_output": write_output,
