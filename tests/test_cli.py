@@ -574,6 +574,7 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(args.json_output)
         self.assertFalse(args.markdown_output)
         self.assertFalse(args.html_output)
+        self.assertIsNone(args.save_html)
 
     def test_parser_accepts_demo_json(self) -> None:
         args = cli.build_parser().parse_args(["demo", "--json"])
@@ -598,6 +599,18 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(args.json_output)
         self.assertFalse(args.markdown_output)
         self.assertTrue(args.html_output)
+        self.assertIsNone(args.save_html)
+
+    def test_parser_accepts_demo_save_html(self) -> None:
+        save_path = Path("/tmp/kh-demo/receipt.html")
+
+        args = cli.build_parser().parse_args(["demo", "--save-html", str(save_path)])
+
+        self.assertEqual(args.handler, "demo")
+        self.assertFalse(args.json_output)
+        self.assertFalse(args.markdown_output)
+        self.assertFalse(args.html_output)
+        self.assertEqual(args.save_html, save_path)
 
     def test_parser_rejects_demo_json_and_markdown_together(self) -> None:
         with redirect_stderr(io.StringIO()):
@@ -608,6 +621,13 @@ class DemoCommandTests(unittest.TestCase):
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
                 cli.build_parser().parse_args(["demo", "--json", "--html"])
+
+    def test_parser_rejects_demo_html_and_save_html_together(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(
+                    ["demo", "--html", "--save-html", "/tmp/kh-demo/receipt.html"]
+                )
 
     def test_main_demo_bypasses_local_config_loading(self) -> None:
         with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
@@ -649,6 +669,21 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(run_demo.call_args.kwargs["json_output"])
         self.assertFalse(run_demo.call_args.kwargs["markdown_output"])
         self.assertTrue(run_demo.call_args.kwargs["html_output"])
+        self.assertIsNone(run_demo.call_args.kwargs["save_html"])
+
+    def test_main_demo_save_html_bypasses_local_config_loading(self) -> None:
+        save_path = Path("/tmp/kh-demo/receipt.html")
+
+        with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
+            with patch.object(cli, "run_demo", return_value=0) as run_demo:
+                result = cli.main(["demo", "--save-html", str(save_path)])
+
+        self.assertEqual(result, 0)
+        run_demo.assert_called_once()
+        self.assertFalse(run_demo.call_args.kwargs["json_output"])
+        self.assertFalse(run_demo.call_args.kwargs["markdown_output"])
+        self.assertFalse(run_demo.call_args.kwargs["html_output"])
+        self.assertEqual(run_demo.call_args.kwargs["save_html"], save_path)
 
     def test_demo_creates_temporary_fake_vault_prompt_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -865,6 +900,54 @@ class DemoCommandTests(unittest.TestCase):
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
 
+    def test_demo_save_html_writes_receipt_and_prints_short_confirmation(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / 'demo <safe> & "quoted"'
+            save_path = root / "nested" / "proof" / "receipt.html"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    save_html=save_path,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            self.assertIn("knowledge-harness demo", text)
+            self.assertIn(f"saved_html: {save_path}", text)
+            self.assertIn(f"cleanup: rm -rf {shlex.quote(str(demo_root))}", text)
+            self.assertNotIn("<!doctype html>", text.lower())
+            self.assertNotIn("<title>knowledge-harness demo receipt</title>", text.lower())
+
+            self.assertTrue(save_path.exists())
+            html_text = save_path.read_text(encoding="utf-8")
+            lowered = html_text.lower()
+            fake_vault = demo_root / "fake-vault"
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            prompt_path = run_path / "prompt.txt"
+            metadata_path = run_path / "run.json"
+
+            self.assertIn("<!doctype html>", lowered)
+            self.assertIn("knowledge-harness demo --html", html_text)
+            self.assertIn(html.escape(str(fake_vault), quote=True), html_text)
+            self.assertIn(html.escape(str(run_path), quote=True), html_text)
+            self.assertIn(html.escape(str(prompt_path), quote=True), html_text)
+            self.assertIn(html.escape(str(metadata_path), quote=True), html_text)
+            self.assertTrue(prompt_path.exists())
+            self.assertTrue(metadata_path.exists())
+            self.assertFalse((run_path / "last_message.txt").exists())
+
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertNotIn("--add-dir", metadata["command"])
+            self.assertNotIn(str(fake_vault), metadata["command"])
+
     def test_demo_html_escapes_and_defangs_dynamic_values(self) -> None:
         receipt = {
             "fake_vault": '/tmp/<script src="x">/fake-vault',
@@ -1010,6 +1093,61 @@ class DemoCommandTests(unittest.TestCase):
         self.assertTrue(prompt_path.exists())
         self.assertTrue(metadata_path.exists())
         shutil.rmtree(fake_vault.parent)
+
+    def test_module_demo_save_html_invocation_does_not_need_config_or_codex(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            save_path = Path(tmpdir) / "nested" / "receipt.html"
+
+            proc = subprocess.run(
+                [
+                    sys.executable,
+                    "-m",
+                    "knowledge_harness.cli",
+                    "demo",
+                    "--save-html",
+                    str(save_path),
+                ],
+                cwd=repo_root,
+                env=env,
+                text=True,
+                capture_output=True,
+            )
+
+            self.assertEqual(proc.returncode, 0, proc.stderr)
+            self.assertIn(f"saved_html: {save_path}", proc.stdout)
+            self.assertIn("cleanup: rm -rf ", proc.stdout)
+            self.assertNotIn("<!doctype html>", proc.stdout.lower())
+            self.assertTrue(save_path.exists())
+
+            html_text = save_path.read_text(encoding="utf-8")
+            self.assertIn("<!doctype html>", html_text.lower())
+            self.assertIn("knowledge-harness demo --html", html_text)
+            self.assertIn("real_vault_used=false", html_text)
+            self.assertIn("codex_used=false", html_text)
+            self.assertIn("write_output=false", html_text)
+            self.assertIn("dry_run=true", html_text)
+
+            fake_vault_marker = "<th scope=\"row\">Fake vault path</th><td><code>"
+            prompt_marker = "<th scope=\"row\">Prompt file</th><td><code>"
+            metadata_marker = "<th scope=\"row\">Metadata file</th><td><code>"
+            fake_vault = Path(
+                html_text.split(fake_vault_marker, 1)[1].split("</code>", 1)[0]
+            )
+            prompt_path = Path(
+                html_text.split(prompt_marker, 1)[1].split("</code>", 1)[0]
+            )
+            metadata_path = Path(
+                html_text.split(metadata_marker, 1)[1].split("</code>", 1)[0]
+            )
+
+            self.assertTrue(prompt_path.exists())
+            self.assertTrue(metadata_path.exists())
+            shutil.rmtree(fake_vault.parent)
 
     def test_demo_does_not_mutate_local_config_file(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:

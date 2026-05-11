@@ -56,6 +56,15 @@ It prints a static, self-contained HTML receipt with the command, fake vault
 path, run paths, safety claims, evidence checklist, and cleanup command. The
 committed public-safe sample is [examples/demo-receipt.html](examples/demo-receipt.html).
 
+To save a local proof page you can open or share as a file, use:
+
+```bash
+knowledge-harness demo --save-html /tmp/kh-demo/receipt.html
+```
+
+It writes the same self-contained receipt to that path and prints a cleanup
+command instead of dumping the HTML to the terminal.
+
 For a copy/pasteable proof receipt in a README, issue, or audit note, use:
 
 ```bash

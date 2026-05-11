@@ -596,6 +596,7 @@ def run_demo(
     json_output: bool = False,
     markdown_output: bool = False,
     html_output: bool = False,
+    save_html: Path | None = None,
 ) -> int:
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
@@ -636,6 +637,15 @@ def run_demo(
         return 0
     if html_output:
         print(format_demo_html_receipt(receipt))
+        return 0
+    if save_html is not None:
+        save_html = save_html.expanduser()
+        save_html.parent.mkdir(parents=True, exist_ok=True)
+        save_html.write_text(format_demo_html_receipt(receipt), encoding="utf-8")
+        print("knowledge-harness demo")
+        print(f"saved_html: {save_html}")
+        print(f"status: {receipt['status']}")
+        print(f"cleanup: {receipt['cleanup_command']}")
         return 0
 
     print("knowledge-harness demo")
@@ -933,6 +943,13 @@ def build_parser() -> argparse.ArgumentParser:
         dest="html_output",
         help="Print a self-contained HTML proof receipt instead of human-readable output.",
     )
+    demo_output.add_argument(
+        "--save-html",
+        type=Path,
+        dest="save_html",
+        metavar="PATH",
+        help="Write a self-contained HTML proof receipt to PATH.",
+    )
     demo.set_defaults(handler="demo")
 
     prompt = subparsers.add_parser(
@@ -1044,6 +1061,7 @@ def main(argv: list[str] | None = None) -> int:
             json_output=args.json_output,
             markdown_output=args.markdown_output,
             html_output=args.html_output,
+            save_html=args.save_html,
         )
 
     config = load_config(repo_root)
