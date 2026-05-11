@@ -81,6 +81,16 @@ command: `knowledge-harness demo --markdown`
 - `run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.
 ```
 
+To save the same Markdown receipt instead of printing it to the terminal, run:
+
+```bash
+knowledge-harness demo --save-markdown /tmp/kh-demo/receipt.md
+```
+
+The command creates parent directories when needed, overwrites an existing file
+at that path, writes the sanitized receipt, and prints the saved path plus the
+cleanup command.
+
 For a machine-readable proof receipt, run:
 
 ```bash

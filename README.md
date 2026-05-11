@@ -115,6 +115,16 @@ How does this harness route a public-safe question?
 - `dry_run=true`
 ````
 
+To save that Markdown receipt for a README snippet, GitHub issue, or PR note, use:
+
+```bash
+knowledge-harness demo --save-markdown /tmp/kh-demo/receipt.md
+```
+
+It writes the same sanitized receipt to that path, overwrites an existing file
+at that path, and prints a short saved-path confirmation plus the cleanup
+command.
+
 For automation that needs a machine-readable proof receipt, use:
 
 ```bash

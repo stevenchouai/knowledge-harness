@@ -300,6 +300,7 @@ def build_demo_command(
     *,
     output_flag: str | None = None,
     save_html: Path | None = None,
+    save_markdown: Path | None = None,
 ) -> str:
     command = ["knowledge-harness", "demo"]
     if question != DEMO_QUESTION:
@@ -308,6 +309,8 @@ def build_demo_command(
         command.append(output_flag)
     if save_html is not None:
         command.extend(["--save-html", str(save_html)])
+    if save_markdown is not None:
+        command.extend(["--save-markdown", str(save_markdown)])
     return " ".join(shlex.quote(part) for part in command)
 
 
@@ -658,8 +661,16 @@ def run_demo(
     markdown_output: bool = False,
     html_output: bool = False,
     save_html: Path | None = None,
+    save_markdown: Path | None = None,
     question: str = DEMO_QUESTION,
 ) -> int:
+    save_html = validate_demo_save_path(save_html, suffix=".html", option_name="save_html")
+    save_markdown = validate_demo_save_path(
+        save_markdown,
+        suffix=".md",
+        option_name="save_markdown",
+    )
+
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
     else:
@@ -734,6 +745,22 @@ def run_demo(
         print("knowledge-harness demo")
         print(f"question: {receipt['question']}")
         print(f"saved_html: {save_html}")
+        print(f"status: {receipt['status']}")
+        print(f"cleanup: {receipt['cleanup_command']}")
+        return 0
+    if save_markdown is not None:
+        receipt = build_demo_receipt(
+            demo_root,
+            fake_vault,
+            run_path,
+            question,
+            build_demo_command(question, save_markdown=save_markdown),
+        )
+        save_markdown.parent.mkdir(parents=True, exist_ok=True)
+        save_markdown.write_text(format_demo_markdown_receipt(receipt), encoding="utf-8")
+        print("knowledge-harness demo")
+        print(f"question: {receipt['question']}")
+        print(f"saved_markdown: {save_markdown}")
         print(f"status: {receipt['status']}")
         print(f"cleanup: {receipt['cleanup_command']}")
         return 0
@@ -891,6 +918,29 @@ def validate_output_name(output_name: str | None) -> str | None:
         raise SystemExit("output_name must end with .md")
 
     return output_name
+
+
+def validate_demo_save_path(
+    path: Path | None,
+    *,
+    suffix: str,
+    option_name: str,
+) -> Path | None:
+    if path is None:
+        return None
+
+    raw_path = str(path)
+    expanded = path.expanduser()
+    if raw_path in {"", ".", ".."}:
+        raise SystemExit(f"{option_name} path must include a filename")
+    if ".." in expanded.parts:
+        raise SystemExit(f"{option_name} path must not contain parent traversal")
+    if "\\" in raw_path:
+        raise SystemExit(f"{option_name} path must use forward slashes")
+    if expanded.suffix != suffix:
+        raise SystemExit(f"{option_name} path must end with {suffix}")
+
+    return expanded
 
 
 def build_codex_command(
@@ -1053,6 +1103,13 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="PATH",
         help="Write a self-contained HTML proof receipt to PATH.",
     )
+    demo_output.add_argument(
+        "--save-markdown",
+        type=Path,
+        dest="save_markdown",
+        metavar="PATH",
+        help="Write a copy/pasteable Markdown proof receipt to PATH.",
+    )
     demo.set_defaults(handler="demo")
 
     prompt = subparsers.add_parser(
@@ -1165,6 +1222,7 @@ def main(argv: list[str] | None = None) -> int:
             markdown_output=args.markdown_output,
             html_output=args.html_output,
             save_html=args.save_html,
+            save_markdown=args.save_markdown,
             question=args.question,
         )
 
