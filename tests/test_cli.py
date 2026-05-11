@@ -578,6 +578,7 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(args.html_output)
         self.assertIsNone(args.save_html)
         self.assertIsNone(args.save_markdown)
+        self.assertIsNone(args.save_bundle)
 
     def test_parser_accepts_demo_question(self) -> None:
         args = cli.build_parser().parse_args(["demo", "--question", "Custom proof?"])
@@ -633,6 +634,20 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(args.html_output)
         self.assertIsNone(args.save_html)
         self.assertEqual(args.save_markdown, save_path)
+        self.assertIsNone(args.save_bundle)
+
+    def test_parser_accepts_demo_save_bundle(self) -> None:
+        save_path = Path("/tmp/kh-demo/bundle")
+
+        args = cli.build_parser().parse_args(["demo", "--save-bundle", str(save_path)])
+
+        self.assertEqual(args.handler, "demo")
+        self.assertFalse(args.json_output)
+        self.assertFalse(args.markdown_output)
+        self.assertFalse(args.html_output)
+        self.assertIsNone(args.save_html)
+        self.assertIsNone(args.save_markdown)
+        self.assertEqual(args.save_bundle, save_path)
 
     def test_parser_rejects_demo_json_and_markdown_together(self) -> None:
         with redirect_stderr(io.StringIO()):
@@ -669,6 +684,13 @@ class DemoCommandTests(unittest.TestCase):
                         "--save-markdown",
                         "/tmp/kh-demo/receipt.md",
                     ]
+                )
+
+    def test_parser_rejects_demo_json_and_save_bundle_together(self) -> None:
+        with redirect_stderr(io.StringIO()):
+            with self.assertRaises(SystemExit):
+                cli.build_parser().parse_args(
+                    ["demo", "--json", "--save-bundle", "/tmp/kh-demo/bundle"]
                 )
 
     def test_main_demo_bypasses_local_config_loading(self) -> None:
@@ -754,6 +776,22 @@ class DemoCommandTests(unittest.TestCase):
         self.assertFalse(run_demo.call_args.kwargs["html_output"])
         self.assertIsNone(run_demo.call_args.kwargs["save_html"])
         self.assertEqual(run_demo.call_args.kwargs["save_markdown"], save_path)
+
+    def test_main_demo_save_bundle_bypasses_local_config_loading(self) -> None:
+        save_path = Path("/tmp/kh-demo/bundle")
+
+        with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
+            with patch.object(cli, "run_demo", return_value=0) as run_demo:
+                result = cli.main(["demo", "--save-bundle", str(save_path)])
+
+        self.assertEqual(result, 0)
+        run_demo.assert_called_once()
+        self.assertFalse(run_demo.call_args.kwargs["json_output"])
+        self.assertFalse(run_demo.call_args.kwargs["markdown_output"])
+        self.assertFalse(run_demo.call_args.kwargs["html_output"])
+        self.assertIsNone(run_demo.call_args.kwargs["save_html"])
+        self.assertIsNone(run_demo.call_args.kwargs["save_markdown"])
+        self.assertEqual(run_demo.call_args.kwargs["save_bundle"], save_path)
 
     def test_demo_creates_temporary_fake_vault_prompt_and_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -1247,6 +1285,214 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
+
+    def test_demo_save_bundle_writes_public_safe_evidence_bundle(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo with spaces"
+            save_path = root / "nested" / "proof-bundle"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    save_bundle=save_path,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            self.assertIn("knowledge-harness demo", text)
+            self.assertIn(f"question: {cli.DEMO_QUESTION}", text)
+            self.assertIn(f"saved_bundle: {save_path}", text)
+            self.assertIn(f"readme: {save_path / 'README.md'}", text)
+            self.assertIn("status: no real vault or Codex was used", text)
+            self.assertIn(f"cleanup: rm -rf {shlex.quote(str(demo_root))}", text)
+
+            self.assertEqual(
+                sorted(
+                    path.relative_to(save_path).as_posix()
+                    for path in save_path.rglob("*")
+                    if path.is_file()
+                ),
+                [
+                    "README.md",
+                    "fake-vault/AGENTS.md",
+                    "fake-vault/PROMPTS.md",
+                    "fake-vault/wiki/_index.md",
+                    "prompt.txt",
+                    "receipt.md",
+                    "run.json",
+                ],
+            )
+
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            self.assertEqual(
+                (save_path / "prompt.txt").read_text(encoding="utf-8"),
+                (run_path / "prompt.txt").read_text(encoding="utf-8"),
+            )
+            saved_metadata = json.loads((save_path / "run.json").read_text(encoding="utf-8"))
+            raw_metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(saved_metadata["question"], raw_metadata["question"])
+            self.assertEqual(saved_metadata["dry_run"], raw_metadata["dry_run"])
+            self.assertEqual(saved_metadata["write_output"], raw_metadata["write_output"])
+            self.assertNotIn(str(demo_root), json.dumps(saved_metadata))
+            self.assertNotIn(str(repo_root), json.dumps(saved_metadata))
+            self.assertEqual(
+                (save_path / "fake-vault" / "AGENTS.md").read_text(encoding="utf-8"),
+                cli.DEMO_AGENTS,
+            )
+            self.assertEqual(
+                (save_path / "fake-vault" / "PROMPTS.md").read_text(encoding="utf-8"),
+                cli.DEMO_PROMPTS,
+            )
+            self.assertEqual(
+                (save_path / "fake-vault" / "wiki" / "_index.md").read_text(
+                    encoding="utf-8"
+                ),
+                cli.DEMO_INDEX,
+            )
+            self.assertFalse((save_path / "last_message.txt").exists())
+
+            readme = (save_path / "README.md").read_text(encoding="utf-8")
+            receipt = (save_path / "receipt.md").read_text(encoding="utf-8")
+            for persisted_text in (readme, receipt):
+                self.assertIn(cli.DEMO_QUESTION, persisted_text)
+                self.assertIn("knowledge-harness demo --save-bundle PATH", persisted_text)
+                self.assertIn("prompt.txt", persisted_text)
+                self.assertIn("run.json", persisted_text)
+                self.assertNotIn(str(demo_root), persisted_text)
+                self.assertNotIn(str(save_path), persisted_text)
+
+            self.assertIn("no real vault or Codex was used", readme)
+            self.assertIn("fake-vault/AGENTS.md", readme)
+            self.assertIn("fake-vault/PROMPTS.md", readme)
+            self.assertIn("fake-vault/wiki/_index.md", readme)
+            self.assertIn("# knowledge-harness demo receipt", receipt)
+            self.assertIn("- fake_vault: `fake-vault`", receipt)
+            self.assertIn("- run_dir: `.`", receipt)
+            self.assertIn("- prompt_file: `prompt.txt`", receipt)
+            self.assertIn("- metadata_file: `run.json`", receipt)
+            self.assertIn("`real_vault_used=false`", receipt)
+            self.assertIn("`codex_used=false`", receipt)
+            self.assertIn("`write_output=false`", receipt)
+            self.assertIn("`dry_run=true`", receipt)
+
+            metadata = json.loads((save_path / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertEqual(metadata["command"][0], "missing-codex")
+            self.assertIn("--cd", metadata["command"])
+            self.assertEqual(metadata["command"][metadata["command"].index("--cd") + 1], ".")
+            self.assertIn("--output-last-message", metadata["command"])
+            self.assertEqual(
+                metadata["command"][metadata["command"].index("--output-last-message") + 1],
+                "last_message.txt",
+            )
+            self.assertNotIn("--add-dir", metadata["command"])
+            self.assertNotIn(str(demo_root / "fake-vault"), metadata["command"])
+
+    def test_demo_save_bundle_refreshes_only_owned_bundle_files(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+            save_path = root / "bundle"
+            (save_path / "fake-vault" / "wiki").mkdir(parents=True)
+            for relative_path in cli.DEMO_BUNDLE_FILES:
+                path = save_path / relative_path
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("stale", encoding="utf-8")
+
+            with redirect_stdout(io.StringIO()):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    save_bundle=save_path,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertNotEqual(
+                (save_path / "README.md").read_text(encoding="utf-8"),
+                "stale",
+            )
+            self.assertEqual(
+                (save_path / "fake-vault" / "AGENTS.md").read_text(encoding="utf-8"),
+                cli.DEMO_AGENTS,
+            )
+            metadata = json.loads((save_path / "run.json").read_text(encoding="utf-8"))
+            self.assertTrue(metadata["dry_run"])
+
+    def test_demo_save_bundle_rejects_unsafe_targets_before_creating_demo(self) -> None:
+        unsafe_paths = [
+            Path("../bundle"),
+            Path("nested") / ".." / "bundle",
+            Path("nested\\bundle"),
+        ]
+        for save_path in unsafe_paths:
+            with self.subTest(save_path=save_path):
+                with tempfile.TemporaryDirectory() as tmpdir:
+                    root = Path(tmpdir)
+                    repo_root = root / "repo"
+                    repo_root.mkdir()
+                    demo_root = root / "demo"
+
+                    with self.assertRaises(SystemExit):
+                        cli.run_demo(
+                            repo_root=repo_root,
+                            demo_root=demo_root,
+                            save_bundle=save_path,
+                        )
+
+                    self.assertFalse(demo_root.exists())
+
+    def test_demo_save_bundle_rejects_file_target_before_creating_demo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+            save_path = root / "bundle"
+            save_path.write_text("not a directory", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    save_bundle=save_path,
+                )
+
+            self.assertIn("not a file", str(raised.exception))
+            self.assertFalse(demo_root.exists())
+
+    def test_demo_save_bundle_rejects_non_owned_existing_contents_before_demo(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+            save_path = root / "bundle"
+            save_path.mkdir()
+            (save_path / "notes.md").write_text("do not overwrite", encoding="utf-8")
+
+            with self.assertRaises(SystemExit) as raised:
+                cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    save_bundle=save_path,
+                )
+
+            self.assertIn("files this command does not own", str(raised.exception))
+            self.assertIn("- notes.md", str(raised.exception))
+            self.assertEqual(
+                (save_path / "notes.md").read_text(encoding="utf-8"),
+                "do not overwrite",
+            )
+            self.assertFalse(demo_root.exists())
 
     def test_demo_save_markdown_rejects_unsafe_paths_before_creating_demo(self) -> None:
         unsafe_paths = [

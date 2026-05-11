@@ -55,6 +55,16 @@ To use your own harmless question with the same fake-vault safety rails, run:
 knowledge-harness demo --question "What can this fake vault prove?"
 ```
 
+To write a public-safe evidence bundle that someone else can inspect without
+Steven's private vault, use:
+
+```bash
+knowledge-harness demo --save-bundle /tmp/kh-demo-bundle
+```
+
+The bundle contains fake vault contract files, the assembled dry-run prompt,
+run metadata, a Markdown receipt, and a README with a verification checklist.
+
 For a quick browser-friendly proof card, use:
 
 ```bash
