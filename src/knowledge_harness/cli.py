@@ -261,7 +261,12 @@ def latest_run_path(run_root: Path) -> Path:
     return run_paths[-1]
 
 
-def verify_demo_evidence(demo_root: Path, fake_vault: Path, run_path: Path) -> None:
+def verify_demo_evidence(
+    demo_root: Path,
+    fake_vault: Path,
+    run_path: Path,
+    question: str = DEMO_QUESTION,
+) -> None:
     prompt_path = run_path / "prompt.txt"
     metadata_path = run_path / "run.json"
     output_path = run_path / "last_message.txt"
@@ -271,6 +276,8 @@ def verify_demo_evidence(demo_root: Path, fake_vault: Path, run_path: Path) -> N
         raise SystemExit(f"Demo metadata did not record dry_run=true: {metadata_path}")
     if metadata.get("write_output"):
         raise SystemExit(f"Demo metadata unexpectedly allowed vault writes: {metadata_path}")
+    if metadata.get("question") != question:
+        raise SystemExit(f"Demo metadata did not record the demo question: {metadata_path}")
     if command[:1] != [str(demo_root / "missing-codex")]:
         raise SystemExit(
             f"Demo metadata did not use the missing demo Codex path: {metadata_path}"
@@ -281,13 +288,41 @@ def verify_demo_evidence(demo_root: Path, fake_vault: Path, run_path: Path) -> N
         raise SystemExit(f"Demo dry run unexpectedly created an output file: {output_path}")
 
     prompt = prompt_path.read_text(encoding="utf-8")
+    if question not in prompt:
+        raise SystemExit(f"Demo prompt is missing the demo question: {prompt_path}")
     for snippet in (DEMO_AGENTS.strip(), DEMO_PROMPTS.strip(), DEMO_INDEX.strip()):
         if snippet not in prompt:
             raise SystemExit(f"Demo prompt is missing fake vault content: {prompt_path}")
 
 
-def build_demo_receipt(demo_root: Path, fake_vault: Path, run_path: Path) -> dict[str, object]:
+def build_demo_command(
+    question: str,
+    *,
+    output_flag: str | None = None,
+    save_html: Path | None = None,
+) -> str:
+    command = ["knowledge-harness", "demo"]
+    if question != DEMO_QUESTION:
+        command.extend(["--question", question])
+    if output_flag is not None:
+        command.append(output_flag)
+    if save_html is not None:
+        command.extend(["--save-html", str(save_html)])
+    return " ".join(shlex.quote(part) for part in command)
+
+
+def build_demo_receipt(
+    demo_root: Path,
+    fake_vault: Path,
+    run_path: Path,
+    question: str = DEMO_QUESTION,
+    command: str | None = None,
+) -> dict[str, object]:
+    if command is None:
+        command = build_demo_command(question)
     return {
+        "question": question,
+        "command": command,
         "fake_vault": str(fake_vault),
         "run_dir": str(run_path),
         "prompt_file": str(run_path / "prompt.txt"),
@@ -302,7 +337,16 @@ def build_demo_receipt(demo_root: Path, fake_vault: Path, run_path: Path) -> dic
     }
 
 
+def markdown_text_fence(value: object) -> str:
+    text = str(value)
+    longest_backtick_run = max((len(match.group(0)) for match in re.finditer(r"`+", text)), default=0)
+    fence = "`" * max(3, longest_backtick_run + 1)
+    return f"{fence}text\n{text}\n{fence}"
+
+
 def format_demo_markdown_receipt(receipt: dict[str, object]) -> str:
+    command = receipt.get("command", "knowledge-harness demo --markdown")
+    question = receipt.get("question")
     safety_claims = (
         ("real_vault_used", receipt["real_vault_used"]),
         ("codex_used", receipt["codex_used"]),
@@ -315,7 +359,13 @@ def format_demo_markdown_receipt(receipt: dict[str, object]) -> str:
     lines = [
         "# knowledge-harness demo receipt",
         "",
-        "command: `knowledge-harness demo --markdown`",
+        "command:",
+        markdown_text_fence(command),
+        *(
+            ["", "question:", markdown_text_fence(question)]
+            if question is not None
+            else []
+        ),
         "",
         "## Paths",
         "",
@@ -362,6 +412,8 @@ def html_escape(value: object) -> str:
 
 
 def format_demo_html_receipt(receipt: dict[str, object]) -> str:
+    command = receipt.get("command", "knowledge-harness demo --html")
+    question = receipt.get("question")
     safety_claims = (
         ("real_vault_used", receipt["real_vault_used"]),
         ("codex_used", receipt["codex_used"]),
@@ -394,6 +446,14 @@ def format_demo_html_receipt(receipt: dict[str, object]) -> str:
     evidence_lines = "\n".join(
         f"          <li>{html_escape(item)}</li>" for item in evidence_items
     )
+    question_section = ""
+    if question is not None:
+        question_section = f"""
+        <section aria-labelledby="question-title">
+          <h2 id="question-title">Question</h2>
+          <p>{html_escape(question)}</p>
+        </section>
+"""
     return f"""<!doctype html>
 <html lang="en">
   <head>
@@ -553,8 +613,9 @@ def format_demo_html_receipt(receipt: dict[str, object]) -> str:
 
         <section aria-labelledby="command-title">
           <h2 id="command-title">Command</h2>
-          <code class="command">knowledge-harness demo --html</code>
+          <code class="command">{html_escape(command)}</code>
         </section>
+{question_section}
 
         <section aria-labelledby="paths-title">
           <h2 id="paths-title">Evidence Paths</h2>
@@ -597,6 +658,7 @@ def run_demo(
     markdown_output: bool = False,
     html_output: bool = False,
     save_html: Path | None = None,
+    question: str = DEMO_QUESTION,
 ) -> int:
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
@@ -617,7 +679,7 @@ def run_demo(
         result = run_query(
             repo_root=repo_root,
             config=config,
-            question=DEMO_QUESTION,
+            question=question,
             output_name=None,
             write_output=False,
             dry_run=True,
@@ -627,28 +689,64 @@ def run_demo(
         return result
 
     run_path = latest_run_path(run_root)
-    verify_demo_evidence(demo_root, fake_vault, run_path)
-    receipt = build_demo_receipt(demo_root, fake_vault, run_path)
+    verify_demo_evidence(demo_root, fake_vault, run_path, question)
     if json_output:
+        receipt = build_demo_receipt(
+            demo_root,
+            fake_vault,
+            run_path,
+            question,
+            build_demo_command(question, output_flag="--json"),
+        )
         print(json.dumps(receipt, ensure_ascii=False, indent=2))
         return 0
     if markdown_output:
+        receipt = build_demo_receipt(
+            demo_root,
+            fake_vault,
+            run_path,
+            question,
+            build_demo_command(question, output_flag="--markdown"),
+        )
         print(format_demo_markdown_receipt(receipt))
         return 0
     if html_output:
+        receipt = build_demo_receipt(
+            demo_root,
+            fake_vault,
+            run_path,
+            question,
+            build_demo_command(question, output_flag="--html"),
+        )
         print(format_demo_html_receipt(receipt))
         return 0
     if save_html is not None:
         save_html = save_html.expanduser()
+        receipt = build_demo_receipt(
+            demo_root,
+            fake_vault,
+            run_path,
+            question,
+            build_demo_command(question, save_html=save_html),
+        )
         save_html.parent.mkdir(parents=True, exist_ok=True)
         save_html.write_text(format_demo_html_receipt(receipt), encoding="utf-8")
         print("knowledge-harness demo")
+        print(f"question: {receipt['question']}")
         print(f"saved_html: {save_html}")
         print(f"status: {receipt['status']}")
         print(f"cleanup: {receipt['cleanup_command']}")
         return 0
 
+    receipt = build_demo_receipt(
+        demo_root,
+        fake_vault,
+        run_path,
+        question,
+        build_demo_command(question),
+    )
     print("knowledge-harness demo")
+    print(f"question: {receipt['question']}")
     print(f"fake_vault: {receipt['fake_vault']}")
     print(f"run_dir: {receipt['run_dir']}")
     print(f"prompt_file: {receipt['prompt_file']}")
@@ -924,6 +1022,11 @@ def build_parser() -> argparse.ArgumentParser:
         "demo",
         help="Run a public-safe fake vault dry run without Codex or local config edits.",
     )
+    demo.add_argument(
+        "--question",
+        default=DEMO_QUESTION,
+        help="Question to place in the fake-vault demo prompt.",
+    )
     demo_output = demo.add_mutually_exclusive_group()
     demo_output.add_argument(
         "--json",
@@ -1062,6 +1165,7 @@ def main(argv: list[str] | None = None) -> int:
             markdown_output=args.markdown_output,
             html_output=args.html_output,
             save_html=args.save_html,
+            question=args.question,
         )
 
     config = load_config(repo_root)

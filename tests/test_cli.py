@@ -572,10 +572,17 @@ class DemoCommandTests(unittest.TestCase):
         args = cli.build_parser().parse_args(["demo"])
 
         self.assertEqual(args.handler, "demo")
+        self.assertEqual(args.question, cli.DEMO_QUESTION)
         self.assertFalse(args.json_output)
         self.assertFalse(args.markdown_output)
         self.assertFalse(args.html_output)
         self.assertIsNone(args.save_html)
+
+    def test_parser_accepts_demo_question(self) -> None:
+        args = cli.build_parser().parse_args(["demo", "--question", "Custom proof?"])
+
+        self.assertEqual(args.handler, "demo")
+        self.assertEqual(args.question, "Custom proof?")
 
     def test_parser_accepts_demo_json(self) -> None:
         args = cli.build_parser().parse_args(["demo", "--json"])
@@ -637,6 +644,18 @@ class DemoCommandTests(unittest.TestCase):
 
         self.assertEqual(result, 0)
         run_demo.assert_called_once()
+        self.assertEqual(run_demo.call_args.kwargs["question"], cli.DEMO_QUESTION)
+
+    def test_main_demo_question_bypasses_local_config_loading(self) -> None:
+        question = "What can this fake vault prove?"
+
+        with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
+            with patch.object(cli, "run_demo", return_value=0) as run_demo:
+                result = cli.main(["demo", "--question", question])
+
+        self.assertEqual(result, 0)
+        run_demo.assert_called_once()
+        self.assertEqual(run_demo.call_args.kwargs["question"], question)
 
     def test_main_demo_json_bypasses_local_config_loading(self) -> None:
         with patch.object(cli, "load_config", side_effect=AssertionError("loaded config")):
@@ -699,6 +718,7 @@ class DemoCommandTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertIn("status: no real vault or Codex was used", output.getvalue())
+            self.assertIn(f"question: {cli.DEMO_QUESTION}", output.getvalue())
 
             fake_vault = demo_root / "fake-vault"
             run_root = demo_root / "runs"
@@ -725,6 +745,7 @@ class DemoCommandTests(unittest.TestCase):
             self.assertIn("Route public demo questions through the fake wiki index.", prompt)
             self.assertIn("[[public-demo]] explains the sanitized demo flow.", prompt)
             self.assertIn("Answer in English.", prompt)
+            self.assertIn(cli.DEMO_QUESTION, prompt)
 
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
             self.assertTrue(metadata["dry_run"])
@@ -737,6 +758,37 @@ class DemoCommandTests(unittest.TestCase):
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
             self.assertFalse((demo_root / "missing-codex").exists())
+
+    def test_demo_custom_question_updates_prompt_metadata_and_human_output(self) -> None:
+        question = "What can this fake vault prove?"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    question=question,
+                )
+
+            self.assertEqual(result, 0)
+            self.assertIn(f"question: {question}", output.getvalue())
+
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            prompt = (run_path / "prompt.txt").read_text(encoding="utf-8")
+            metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+
+            self.assertIn(question, prompt)
+            self.assertNotIn(cli.DEMO_QUESTION, prompt)
+            self.assertEqual(metadata["question"], question)
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertEqual(metadata["language"], "en")
 
     def test_demo_json_prints_machine_readable_safe_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -760,6 +812,8 @@ class DemoCommandTests(unittest.TestCase):
             prompt_path = Path(receipt["prompt_file"])
             metadata_path = Path(receipt["metadata_file"])
 
+            self.assertEqual(receipt["question"], cli.DEMO_QUESTION)
+            self.assertEqual(receipt["command"], "knowledge-harness demo --json")
             self.assertEqual(receipt["fake_vault"], str(fake_vault))
             self.assertEqual(prompt_path, run_path / "prompt.txt")
             self.assertEqual(metadata_path, run_path / "run.json")
@@ -789,10 +843,51 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse((run_path / "last_message.txt").exists())
 
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
+
+    def test_demo_json_custom_question_prints_machine_readable_safe_receipt(self) -> None:
+        question = "What can this fake vault prove?"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    json_output=True,
+                    question=question,
+                )
+
+            self.assertEqual(result, 0)
+            receipt = json.loads(output.getvalue())
+            metadata_path = Path(receipt["metadata_file"])
+            prompt_path = Path(receipt["prompt_file"])
+
+            self.assertEqual(receipt["question"], question)
+            self.assertEqual(
+                receipt["command"],
+                "knowledge-harness demo --question 'What can this fake vault prove?' --json",
+            )
+            self.assertFalse(receipt["real_vault_used"])
+            self.assertFalse(receipt["codex_used"])
+            self.assertFalse(receipt["write_output"])
+            self.assertTrue(receipt["dry_run"])
+
+            self.assertIn(question, prompt_path.read_text(encoding="utf-8"))
+            metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], question)
+            self.assertTrue(metadata["dry_run"])
+            self.assertFalse(metadata["write_output"])
+            self.assertNotIn("--add-dir", metadata["command"])
 
     def test_demo_markdown_prints_copy_pasteable_safe_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -817,7 +912,8 @@ class DemoCommandTests(unittest.TestCase):
             metadata_path = run_path / "run.json"
 
             self.assertIn("# knowledge-harness demo receipt", text)
-            self.assertIn("command: `knowledge-harness demo --markdown`", text)
+            self.assertIn("command:\n```text\nknowledge-harness demo --markdown\n```", text)
+            self.assertIn(f"question:\n```text\n{cli.DEMO_QUESTION}\n```", text)
             self.assertIn(f"- fake_vault: `{fake_vault}`", text)
             self.assertIn(f"- run_dir: `{run_path}`", text)
             self.assertIn(f"- prompt_file: `{prompt_path}`", text)
@@ -838,10 +934,66 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse((run_path / "last_message.txt").exists())
 
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
+
+    def test_demo_markdown_custom_question_prints_question_and_command(self) -> None:
+        question = "What can this fake vault prove?"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    markdown_output=True,
+                    question=question,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            self.assertIn(
+                "command:\n```text\nknowledge-harness demo --question 'What can this fake vault prove?' --markdown\n```",
+                text,
+            )
+            self.assertIn(f"question:\n```text\n{question}\n```", text)
+
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            prompt = (run_path / "prompt.txt").read_text(encoding="utf-8")
+            metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+            self.assertIn(question, prompt)
+            self.assertEqual(metadata["question"], question)
+
+    def test_demo_markdown_fences_question_with_backticks_and_raw_html(self) -> None:
+        question = "Can ``` break <img src=x onerror=alert(1)> markdown?"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    markdown_output=True,
+                    question=question,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            self.assertIn("question:\n````text\nCan ``` break <img src=x onerror=alert(1)> markdown?\n````", text)
+            self.assertNotIn(f"question: {json.dumps(question)}", text)
 
     def test_demo_html_prints_self_contained_safe_receipt(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -869,6 +1021,7 @@ class DemoCommandTests(unittest.TestCase):
             self.assertIn("<!doctype html>", lowered)
             self.assertIn("<title>knowledge-harness demo receipt</title>", lowered)
             self.assertIn("knowledge-harness demo --html", text)
+            self.assertIn(html.escape(cli.DEMO_QUESTION, quote=True), text)
             self.assertIn(html.escape(str(fake_vault), quote=True), text)
             self.assertIn(html.escape(str(run_path), quote=True), text)
             self.assertIn(html.escape(str(prompt_path), quote=True), text)
@@ -896,10 +1049,43 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse((run_path / "last_message.txt").exists())
 
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
             self.assertNotIn(str(fake_vault), metadata["command"])
+
+    def test_demo_html_custom_question_prints_question_and_command(self) -> None:
+        question = "What can this fake vault prove?"
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            demo_root = root / "demo"
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_demo(
+                    repo_root=repo_root,
+                    demo_root=demo_root,
+                    html_output=True,
+                    question=question,
+                )
+
+            self.assertEqual(result, 0)
+            text = output.getvalue()
+            self.assertIn(
+                "knowledge-harness demo --question &#x27;What can this fake vault prove?&#x27; --html",
+                text,
+            )
+            self.assertIn(html.escape(question, quote=True), text)
+
+            run_path = next(path for path in (demo_root / "runs").iterdir() if path.is_dir())
+            prompt = (run_path / "prompt.txt").read_text(encoding="utf-8")
+            metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+            self.assertIn(question, prompt)
+            self.assertEqual(metadata["question"], question)
 
     def test_demo_save_html_writes_receipt_and_prints_short_confirmation(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -920,6 +1106,7 @@ class DemoCommandTests(unittest.TestCase):
             self.assertEqual(result, 0)
             text = output.getvalue()
             self.assertIn("knowledge-harness demo", text)
+            self.assertIn(f"question: {cli.DEMO_QUESTION}", text)
             self.assertIn(f"saved_html: {save_path}", text)
             self.assertIn(f"cleanup: rm -rf {shlex.quote(str(demo_root))}", text)
             self.assertNotIn("<!doctype html>", text.lower())
@@ -934,7 +1121,8 @@ class DemoCommandTests(unittest.TestCase):
             metadata_path = run_path / "run.json"
 
             self.assertIn("<!doctype html>", lowered)
-            self.assertIn("knowledge-harness demo --html", html_text)
+            self.assertIn(f"knowledge-harness demo --save-html {save_path}", html_text)
+            self.assertIn(html.escape(cli.DEMO_QUESTION, quote=True), html_text)
             self.assertIn(html.escape(str(fake_vault), quote=True), html_text)
             self.assertIn(html.escape(str(run_path), quote=True), html_text)
             self.assertIn(html.escape(str(prompt_path), quote=True), html_text)
@@ -944,6 +1132,7 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse((run_path / "last_message.txt").exists())
 
             metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+            self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
@@ -951,6 +1140,8 @@ class DemoCommandTests(unittest.TestCase):
 
     def test_demo_html_escapes_and_defangs_dynamic_values(self) -> None:
         receipt = {
+            "question": "question <ok> javascript:alert(1)",
+            "command": "knowledge-harness demo --question 'https://example.invalid' --html",
             "fake_vault": '/tmp/<script src="x">/fake-vault',
             "run_dir": "/tmp/javascript:alert(1)/runs",
             "prompt_file": "/tmp/onclick=boom/prompt.txt",
@@ -968,6 +1159,8 @@ class DemoCommandTests(unittest.TestCase):
         lowered = text.lower()
 
         self.assertIn("&lt;script src=&quot;x&quot;&gt;", text)
+        self.assertIn("question &lt;ok&gt; javascript&#58;alert(1)", lowered)
+        self.assertIn("https&#58;//example.invalid", lowered)
         self.assertIn("status &lt;ok&gt; &amp; &quot;quoted&quot;", text)
         self.assertIn("javascript&#58;alert(1)", lowered)
         self.assertIn("onclick&#61;boom", lowered)
@@ -1000,12 +1193,54 @@ class DemoCommandTests(unittest.TestCase):
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
         receipt = json.loads(proc.stdout)
+        self.assertEqual(receipt["question"], cli.DEMO_QUESTION)
         self.assertFalse(receipt["real_vault_used"])
         self.assertFalse(receipt["codex_used"])
         self.assertFalse(receipt["write_output"])
         self.assertTrue(receipt["dry_run"])
         self.assertTrue(Path(receipt["prompt_file"]).exists())
         self.assertTrue(Path(receipt["metadata_file"]).exists())
+        shutil.rmtree(Path(receipt["fake_vault"]).parent)
+
+    def test_module_demo_json_custom_question_does_not_need_config_or_codex(self) -> None:
+        repo_root = Path(__file__).resolve().parents[1]
+        env = os.environ.copy()
+        env["PYTHONPATH"] = str(repo_root / "src")
+        env["PYTHONDONTWRITEBYTECODE"] = "1"
+        question = "What can this fake vault prove?"
+
+        proc = subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "knowledge_harness.cli",
+                "demo",
+                "--question",
+                question,
+                "--json",
+            ],
+            cwd=repo_root,
+            env=env,
+            text=True,
+            capture_output=True,
+        )
+
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        receipt = json.loads(proc.stdout)
+        self.assertEqual(receipt["question"], question)
+        self.assertFalse(receipt["real_vault_used"])
+        self.assertFalse(receipt["codex_used"])
+        self.assertFalse(receipt["write_output"])
+        self.assertTrue(receipt["dry_run"])
+
+        prompt_path = Path(receipt["prompt_file"])
+        metadata_path = Path(receipt["metadata_file"])
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        self.assertIn(question, prompt_path.read_text(encoding="utf-8"))
+        self.assertEqual(metadata["question"], question)
+        self.assertTrue(metadata["dry_run"])
+        self.assertFalse(metadata["write_output"])
+        self.assertNotIn("--add-dir", metadata["command"])
         shutil.rmtree(Path(receipt["fake_vault"]).parent)
 
     def test_module_demo_markdown_invocation_does_not_need_config_or_codex(self) -> None:
@@ -1023,7 +1258,7 @@ class DemoCommandTests(unittest.TestCase):
         )
 
         self.assertEqual(proc.returncode, 0, proc.stderr)
-        self.assertIn("command: `knowledge-harness demo --markdown`", proc.stdout)
+        self.assertIn("command:\n```text\nknowledge-harness demo --markdown\n```", proc.stdout)
         self.assertIn("`real_vault_used=false`", proc.stdout)
         self.assertIn("`codex_used=false`", proc.stdout)
         self.assertIn("`write_output=false`", proc.stdout)
@@ -1127,7 +1362,8 @@ class DemoCommandTests(unittest.TestCase):
 
             html_text = save_path.read_text(encoding="utf-8")
             self.assertIn("<!doctype html>", html_text.lower())
-            self.assertIn("knowledge-harness demo --html", html_text)
+            self.assertIn(f"knowledge-harness demo --save-html {save_path}", html_text)
+            self.assertIn(html.escape(cli.DEMO_QUESTION, quote=True), html_text)
             self.assertIn("real_vault_used=false", html_text)
             self.assertIn("codex_used=false", html_text)
             self.assertIn("write_output=false", html_text)

@@ -49,13 +49,19 @@ the easiest public-safe demo path.
 The demo creates a temporary fake vault, assembles a dry-run prompt, writes
 temporary run metadata, and prints the evidence paths. It does not read a real
 Obsidian vault, does not require Codex, and does not edit `config/harness.json`.
+To use your own harmless question with the same fake-vault safety rails, run:
+
+```bash
+knowledge-harness demo --question "What can this fake vault prove?"
+```
+
 For a quick browser-friendly proof card, use:
 
 ```bash
 knowledge-harness demo --html
 ```
 
-It prints a static, self-contained HTML receipt with the command, fake vault
+It prints a static, self-contained HTML receipt with the command, question, fake vault
 path, run paths, safety claims, evidence checklist, and cleanup command. The
 committed public-safe sample is [examples/demo-receipt.html](examples/demo-receipt.html).
 For the shortest no-install proof flow, open the
@@ -78,13 +84,21 @@ For a copy/pasteable proof receipt in a README, issue, or audit note, use:
 knowledge-harness demo --markdown
 ```
 
-It prints Markdown with the command, fake vault path, run paths, safety claims,
+It prints Markdown with the command, question, fake vault path, run paths, safety claims,
 evidence to check, and cleanup command:
 
-```markdown
+````markdown
 # knowledge-harness demo receipt
 
-command: `knowledge-harness demo --markdown`
+command:
+```text
+knowledge-harness demo --markdown
+```
+
+question:
+```text
+How does this harness route a public-safe question?
+```
 
 ## Paths
 
@@ -99,7 +113,7 @@ command: `knowledge-harness demo --markdown`
 - `codex_used=false`
 - `write_output=false`
 - `dry_run=true`
-```
+````
 
 For automation that needs a machine-readable proof receipt, use:
 
@@ -111,6 +125,8 @@ It prints JSON like:
 
 ```json
 {
+  "question": "How does this harness route a public-safe question?",
+  "command": "knowledge-harness demo --json",
   "fake_vault": "/tmp/knowledge-harness-demo-.../fake-vault",
   "run_dir": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS",
   "prompt_file": "/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/prompt.txt",
