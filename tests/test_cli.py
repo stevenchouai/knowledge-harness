@@ -4,6 +4,7 @@ import html
 import io
 import json
 import os
+import re
 import shlex
 import shutil
 import subprocess
@@ -1171,6 +1172,75 @@ class DemoCommandTests(unittest.TestCase):
 
             self.assertEqual(result, 0)
             self.assertEqual(config_path.read_text(encoding="utf-8"), config_text)
+
+
+class VisitorTourTests(unittest.TestCase):
+    def read_repo_file(self, relative_path: str) -> str:
+        repo_root = Path(__file__).resolve().parents[1]
+        return (repo_root / relative_path).read_text(encoding="utf-8")
+
+    def test_visitor_tour_is_linked_from_public_docs(self) -> None:
+        readme = self.read_repo_file("README.md")
+        fake_vault_demo = self.read_repo_file("docs/FAKE_VAULT_DEMO.md")
+
+        self.assertIn("[90-second visitor tour](examples/visitor-tour.html)", readme)
+        self.assertIn(
+            "[90-second visitor tour](../examples/visitor-tour.html)",
+            fake_vault_demo,
+        )
+
+    def test_visitor_tour_contains_key_flow_terms(self) -> None:
+        text = self.read_repo_file("examples/visitor-tour.html")
+        lowered = text.lower()
+
+        for expected in (
+            "fake vault contract files",
+            "dry-run prompt assembly",
+            "run metadata and safety flags",
+            "receipt formats",
+            "html",
+            "markdown",
+            "json",
+            "cleanup and no private data boundary",
+            "did not read private",
+            "call codex",
+        ):
+            self.assertIn(expected, lowered)
+
+    def test_visitor_tour_is_self_contained_and_public_safe(self) -> None:
+        text = self.read_repo_file("examples/visitor-tour.html")
+        lowered = text.lower()
+
+        for forbidden in (
+            "<script",
+            "javascript:",
+            "@import",
+            "http://",
+            "https://",
+            "url(",
+            "onload=",
+            "onclick=",
+            "/users/",
+            "/home/",
+            "/private/",
+            "c:\\users\\",
+            "file://",
+            "~/",
+        ):
+            self.assertNotIn(forbidden, lowered)
+
+        credential_patterns = (
+            r"sk-[A-Za-z0-9]{20,}",
+            r"gh[pousr]_[A-Za-z0-9_]{20,}",
+            r"xox[baprs]-[A-Za-z0-9-]{10,}",
+            r"AKIA[0-9A-Z]{16}",
+            r"AIza[0-9A-Za-z_-]{35}",
+            r"-----BEGIN [A-Z ]*PRIVATE KEY-----",
+            r"(?i)(api[_-]?key|access[_-]?token|auth[_-]?token|password|secret)"
+            r"\s*[:=]\s*['\"]?[A-Za-z0-9_./+=-]{8,}",
+        )
+        for pattern in credential_patterns:
+            self.assertIsNone(re.search(pattern, text))
 
 
 class PromptCommandTests(unittest.TestCase):

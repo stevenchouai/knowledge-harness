@@ -41,6 +41,9 @@ assets, and no network-loading links. It shows the command, fake vault path, run
 directory, prompt file, metadata file, safety claims, evidence checklist, and
 cleanup command. A committed sanitized sample is available at
 [examples/demo-receipt.html](../examples/demo-receipt.html).
+For a no-install visual overview of the fake vault, dry-run prompt, metadata,
+receipt, and cleanup boundary, open the
+[90-second visitor tour](../examples/visitor-tour.html).
 
 For a copy/pasteable Markdown proof receipt, run:
 

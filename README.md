@@ -55,6 +55,8 @@ knowledge-harness demo --html
 It prints a static, self-contained HTML receipt with the command, fake vault
 path, run paths, safety claims, evidence checklist, and cleanup command. The
 committed public-safe sample is [examples/demo-receipt.html](examples/demo-receipt.html).
+For a no-install overview of the whole proof flow, open the
+[90-second visitor tour](examples/visitor-tour.html).
 
 To save a local proof page you can open or share as a file, use:
 
