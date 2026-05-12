@@ -269,12 +269,15 @@ def verify_demo_evidence(demo_root: Path, fake_vault: Path, run_path: Path) -> N
         raise SystemExit(f"Demo metadata did not record dry_run=true: {metadata_path}")
     if metadata.get("write_output"):
         raise SystemExit(f"Demo metadata unexpectedly allowed vault writes: {metadata_path}")
-    if command[:1] != [str(demo_root / "missing-codex")]:
+    if command[:1] != ["<codex_path>"]:
         raise SystemExit(
-            f"Demo metadata did not use the missing demo Codex path: {metadata_path}"
+            f"Demo metadata did not redact the missing demo Codex path: {metadata_path}"
         )
-    if "--add-dir" in command or str(fake_vault) in command:
+    command_text = json.dumps(command, ensure_ascii=False)
+    if "--add-dir" in command or str(fake_vault) in command_text:
         raise SystemExit(f"Demo metadata unexpectedly granted vault access: {metadata_path}")
+    if str(demo_root) in command_text:
+        raise SystemExit(f"Demo metadata exposed the demo root path: {metadata_path}")
     if output_path.exists():
         raise SystemExit(f"Demo dry run unexpectedly created an output file: {output_path}")
 
@@ -488,6 +491,64 @@ def validate_output_name(output_name: str | None) -> str | None:
     return output_name
 
 
+def redact_command_for_metadata(
+    command: Sequence[str],
+    repo_root: Path,
+    config: HarnessConfig,
+) -> tuple[list[str], dict[str, str]]:
+    descriptions = {
+        "<codex_path>": "configured codex_path",
+        "<repo_root>": "harness repository root",
+        "<run_dir>": "configured run_dir",
+        "<vault_path>": "configured vault_path",
+    }
+    rules = [
+        (str(config.codex_path), "<codex_path>", False),
+        (str(repo_root), "<repo_root>", True),
+        (str(config.run_dir), "<run_dir>", True),
+        (str(config.vault_path), "<vault_path>", True),
+    ]
+    rules.sort(key=lambda rule: len(rule[0]), reverse=True)
+
+    used_placeholders: set[str] = set()
+    redacted_command: list[str] = []
+    for value in command:
+        redacted = value
+        for root_text, placeholder, include_descendants in rules:
+            redacted = redact_path_text(value, root_text, placeholder, include_descendants)
+            if redacted != value:
+                used_placeholders.add(placeholder)
+                break
+        redacted_command.append(redacted)
+
+    redactions = {
+        placeholder: descriptions[placeholder]
+        for placeholder in descriptions
+        if placeholder in used_placeholders
+    }
+    return redacted_command, redactions
+
+
+def redact_path_text(
+    value: str,
+    root_text: str,
+    placeholder: str,
+    include_descendants: bool,
+) -> str:
+    root_text = root_text.rstrip(os.sep) or os.sep
+    if value == root_text:
+        return placeholder
+    if not include_descendants:
+        return value
+
+    prefix = root_text if root_text == os.sep else f"{root_text}{os.sep}"
+    if not value.startswith(prefix):
+        return value
+
+    relative = value[len(prefix) :]
+    return f"{placeholder}/{Path(relative).as_posix()}"
+
+
 def build_codex_command(
     repo_root: Path,
     config: HarnessConfig,
@@ -552,6 +613,7 @@ def run_query(
         output_path,
         write_output=write_output,
     )
+    redacted_cmd, command_redactions = redact_command_for_metadata(cmd, repo_root, config)
 
     metadata = {
         "question": question,
@@ -560,7 +622,8 @@ def run_query(
         "dry_run": dry_run,
         "language": language,
         "model": config.model,
-        "command": cmd,
+        "command": redacted_cmd,
+        "command_redactions": command_redactions,
     }
     (run_path / "run.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"

@@ -147,6 +147,13 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             run_dir=root / "runs",
         )
 
+    def assertCommandDoesNotContainPaths(
+        self, command: list[str], paths: list[Path]
+    ) -> None:
+        command_text = json.dumps(command)
+        for path in paths:
+            self.assertNotIn(str(path), command_text)
+
     def test_dry_run_does_not_require_codex_binary(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -174,9 +181,29 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             self.assertTrue(metadata["dry_run"])
             self.assertEqual(metadata["language"], "zh")
             self.assertEqual(metadata["model"], "test-model")
-            self.assertEqual(metadata["command"][0], str(config.codex_path))
-            model_index = metadata["command"].index("--model")
-            self.assertEqual(metadata["command"][model_index + 1], "test-model")
+            command = metadata["command"]
+            self.assertEqual(command[0], "<codex_path>")
+            cd_index = command.index("--cd")
+            self.assertEqual(command[cd_index + 1], "<repo_root>")
+            output_index = command.index("--output-last-message")
+            self.assertEqual(
+                command[output_index + 1],
+                f"<run_dir>/{run_path.name}/last_message.txt",
+            )
+            model_index = command.index("--model")
+            self.assertEqual(command[model_index + 1], "test-model")
+            self.assertEqual(
+                metadata["command_redactions"],
+                {
+                    "<codex_path>": "configured codex_path",
+                    "<repo_root>": "harness repository root",
+                    "<run_dir>": "configured run_dir",
+                },
+            )
+            self.assertCommandDoesNotContainPaths(
+                command,
+                [config.codex_path, repo_root, config.run_dir, config.vault_path],
+            )
 
     def test_query_model_override_updates_command_and_metadata_for_one_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -253,6 +280,11 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
 
             self.assertIn("workspace-write", command)
             self.assertNotIn("danger-full-access", command)
+            self.assertEqual(command[0], str(config.codex_path))
+            cd_index = command.index("--cd")
+            self.assertEqual(command[cd_index + 1], str(repo_root))
+            output_index = command.index("--output-last-message")
+            self.assertEqual(command[output_index + 1], str(output_path))
             self.assertNotIn("--add-dir", command)
             self.assertNotIn(str(config.vault_path), command)
 
@@ -500,6 +532,45 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             prompt = (run_dirs[0] / "prompt.txt").read_text(encoding="utf-8")
             self.assertIn("wiki/outputs/answer.md", prompt)
 
+    def test_write_output_metadata_redacts_vault_and_run_paths(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config = self.make_config(root, self.make_vault(root))
+
+            with redirect_stdout(io.StringIO()):
+                result = cli.run_query(
+                    repo_root=repo_root,
+                    config=config,
+                    question="What should the harness do next?",
+                    output_name="answer.md",
+                    write_output=True,
+                    dry_run=True,
+                )
+
+            self.assertEqual(result, 0)
+            run_dirs = list(config.run_dir.iterdir())
+            self.assertEqual(len(run_dirs), 1)
+            run_path = run_dirs[0]
+            metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+            command = metadata["command"]
+            add_dir_index = command.index("--add-dir")
+            self.assertEqual(command[add_dir_index + 1], "<vault_path>")
+            output_index = command.index("--output-last-message")
+            self.assertEqual(
+                command[output_index + 1],
+                f"<run_dir>/{run_path.name}/last_message.txt",
+            )
+            self.assertEqual(
+                metadata["command_redactions"]["<vault_path>"],
+                "configured vault_path",
+            )
+            self.assertCommandDoesNotContainPaths(
+                command,
+                [config.codex_path, repo_root, config.run_dir, config.vault_path],
+            )
+
     def test_real_query_records_subprocess_exit_metadata(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -640,11 +711,13 @@ class DemoCommandTests(unittest.TestCase):
             self.assertFalse(metadata["write_output"])
             self.assertEqual(metadata["language"], "en")
             self.assertEqual(metadata["question"], cli.DEMO_QUESTION)
-            self.assertEqual(metadata["command"][0], str(demo_root / "missing-codex"))
+            self.assertEqual(metadata["command"][0], "<codex_path>")
             self.assertIn("workspace-write", metadata["command"])
             self.assertNotIn("danger-full-access", metadata["command"])
             self.assertNotIn("--add-dir", metadata["command"])
-            self.assertNotIn(str(fake_vault), metadata["command"])
+            self.assertNotIn(str(fake_vault), json.dumps(metadata["command"]))
+            self.assertNotIn(str(demo_root), json.dumps(metadata["command"]))
+            self.assertIn("<codex_path>", metadata["command_redactions"])
             self.assertFalse((demo_root / "missing-codex").exists())
 
     def test_demo_json_prints_machine_readable_safe_receipt(self) -> None:
@@ -701,7 +774,8 @@ class DemoCommandTests(unittest.TestCase):
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertNotIn("--add-dir", metadata["command"])
-            self.assertNotIn(str(fake_vault), metadata["command"])
+            self.assertNotIn(str(fake_vault), json.dumps(metadata["command"]))
+            self.assertNotIn(str(demo_root), json.dumps(metadata["command"]))
 
     def test_module_demo_json_invocation_does_not_need_config_or_codex(self) -> None:
         repo_root = Path(__file__).resolve().parents[1]
