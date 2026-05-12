@@ -131,17 +131,20 @@ No auto-edits yet. Just observation.
 
 ### Phase 3: Proposal generation
 
-Periodically produce "improvement proposals" in this repo, for example under:
+Periodically produce "improvement proposals" in this repo under the
+[`proposals/` convention](../proposals/README.md).
 
-`proposals/`
+Proposal filenames should use:
 
-Each proposal should describe:
+`YYYY-MM-DD-<short-kebab-case-summary>.md`
+
+Each proposal should be public-safe and include these required sections:
 
 - observed pattern
 - suspected issue
 - suggested change
-- expected upside
-- risk of the change
+- upside
+- risk
 
 ### Phase 4: Digital-twin governance
 
