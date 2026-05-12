@@ -178,6 +178,65 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             model_index = metadata["command"].index("--model")
             self.assertEqual(metadata["command"][model_index + 1], "test-model")
 
+    def test_create_run_dir_adds_deterministic_suffix_after_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            run_root = root / "runs"
+            stamp = "20260512-010203"
+            (run_root / stamp).mkdir(parents=True)
+            (run_root / f"{stamp}-1").mkdir()
+
+            with patch.object(cli, "make_run_stamp", return_value=stamp):
+                run_path = cli.create_run_dir(run_root)
+
+            self.assertEqual(run_path, run_root / f"{stamp}-2")
+            self.assertTrue(run_path.is_dir())
+
+    def test_two_dry_runs_same_second_create_distinct_run_dirs(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            config = self.make_config(root, self.make_vault(root))
+            stamp = "20260512-010203"
+
+            with patch.object(cli, "make_run_stamp", return_value=stamp):
+                with redirect_stdout(io.StringIO()):
+                    first_result = cli.run_query(
+                        repo_root=repo_root,
+                        config=config,
+                        question="First dry run?",
+                        output_name=None,
+                        write_output=False,
+                        dry_run=True,
+                    )
+                with redirect_stdout(io.StringIO()):
+                    second_result = cli.run_query(
+                        repo_root=repo_root,
+                        config=config,
+                        question="Second dry run?",
+                        output_name=None,
+                        write_output=False,
+                        dry_run=True,
+                    )
+
+            self.assertEqual(first_result, 0)
+            self.assertEqual(second_result, 0)
+            run_dirs = sorted(path for path in config.run_dir.iterdir() if path.is_dir())
+            self.assertEqual([path.name for path in run_dirs], [stamp, f"{stamp}-1"])
+            for run_path in run_dirs:
+                self.assertTrue((run_path / "prompt.txt").exists())
+                self.assertTrue((run_path / "run.json").exists())
+
+            first_metadata = json.loads(
+                (run_dirs[0] / "run.json").read_text(encoding="utf-8")
+            )
+            second_metadata = json.loads(
+                (run_dirs[1] / "run.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(first_metadata["question"], "First dry run?")
+            self.assertEqual(second_metadata["question"], "Second dry run?")
+
     def test_query_model_override_updates_command_and_metadata_for_one_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
