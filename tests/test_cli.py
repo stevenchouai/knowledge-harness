@@ -776,8 +776,6 @@ class PromptCommandTests(unittest.TestCase):
                 result = cli.run_prompt(
                     config=config,
                     question="What should the harness do next?",
-                    output_name=None,
-                    write_output=False,
                 )
 
             prompt = output.getvalue()
@@ -804,8 +802,6 @@ class PromptCommandTests(unittest.TestCase):
                 result = cli.run_prompt(
                     config=config,
                     question="What should the harness do next?",
-                    output_name=None,
-                    write_output=False,
                     language="en",
                 )
 
@@ -819,58 +815,11 @@ class PromptCommandTests(unittest.TestCase):
             self.assertNotIn("Answer in Chinese.", prompt)
             self.assertFalse(config.run_dir.exists())
 
-    def test_prompt_write_output_requires_output_name_for_write_instruction(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            config = cli.HarnessConfig(
-                vault_path=self.make_vault(root),
-                codex_path=root / "missing-codex",
-                model="test-model",
-                run_dir=root / "runs",
-            )
-
-            output = io.StringIO()
-            with redirect_stdout(output):
-                result = cli.run_prompt(
-                    config=config,
-                    question="What should the harness do next?",
-                    output_name=None,
-                    write_output=True,
-                )
-
-            self.assertEqual(result, 0)
-            self.assertIn("Do not write files unless needed", output.getvalue())
-            self.assertNotIn("wiki/outputs", output.getvalue())
-            self.assertFalse(config.run_dir.exists())
-
-    def test_prompt_validates_output_name_before_printing(self) -> None:
-        with tempfile.TemporaryDirectory() as tmpdir:
-            root = Path(tmpdir)
-            config = cli.HarnessConfig(
-                vault_path=self.make_vault(root),
-                codex_path=root / "missing-codex",
-                model="test-model",
-                run_dir=root / "runs",
-            )
-
-            with self.assertRaises(SystemExit):
-                cli.run_prompt(
-                    config=config,
-                    question="What should the harness do next?",
-                    output_name="../escape.md",
-                    write_output=True,
-                )
-
-            self.assertFalse(config.run_dir.exists())
-
     def test_parser_accepts_prompt_subcommand(self) -> None:
         args = cli.build_parser().parse_args(
             [
                 "prompt",
                 "question",
-                "--write-output",
-                "--output-name",
-                "answer.md",
                 "--language",
                 "en",
             ]
@@ -878,9 +827,18 @@ class PromptCommandTests(unittest.TestCase):
 
         self.assertEqual(args.handler, "prompt")
         self.assertEqual(args.question, "question")
-        self.assertTrue(args.write_output)
-        self.assertEqual(args.output_name, "answer.md")
         self.assertEqual(args.language, "en")
+
+    def test_parser_rejects_prompt_write_options(self) -> None:
+        rejected_args = [
+            ["prompt", "question", "--write-output"],
+            ["prompt", "question", "--output-name", "answer.md"],
+        ]
+        for argv in rejected_args:
+            with self.subTest(argv=argv):
+                with redirect_stderr(io.StringIO()):
+                    with self.assertRaises(SystemExit):
+                        cli.build_parser().parse_args(argv)
 
     def test_parser_rejects_invalid_prompt_language(self) -> None:
         with redirect_stderr(io.StringIO()):
