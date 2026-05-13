@@ -137,6 +137,7 @@ knowledge-harness vault-health
 knowledge-harness prompt "基于现有知识库，总结 Steven 当前最值得强化的一个能力杠杆"
 knowledge-harness query "基于现有知识库，总结 Steven 当前最值得强化的一个能力杠杆"
 knowledge-harness query --model gpt-5.4-mini "用另一个模型跑一次临时实验"
+knowledge-harness query --dry-run --redact-metadata-root "/path/to/your/obsidian-vault" "Public-safe audit snapshot"
 knowledge-harness prompt --language en "Summarize the next capability leverage point from the knowledge base"
 ```
 
@@ -176,6 +177,12 @@ those files as context.
 
 Use `--language en` with `prompt` or `query` when the assembled answer should be
 English. The default is `--language zh`.
+
+Use `--redact-metadata-root` on `query`, or set `metadata_redact_roots` in
+`config/harness.json`, to replace matching command path roots in `run.json` while
+leaving the actual Codex command unchanged. This only redacts stored command
+arguments; it does not rewrite `prompt.txt`, stdout, config output, or the
+question text.
 
 The vault health checker is read-only. It scans the configured Obsidian vault for
 orphan markdown notes, broken markdown wikilinks, empty notes, duplicate note

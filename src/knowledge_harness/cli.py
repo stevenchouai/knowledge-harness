@@ -64,6 +64,7 @@ class HarnessConfig:
     codex_path: Path
     model: str
     run_dir: Path
+    metadata_redact_roots: tuple[Path, ...] = ()
 
 
 def load_config(repo_root: Path) -> HarnessConfig:
@@ -74,6 +75,7 @@ def load_config(repo_root: Path) -> HarnessConfig:
         "codex_path": str(DEFAULT_CODEX),
         "model": DEFAULT_MODEL,
         "run_dir": str(repo_root / "runs"),
+        "metadata_redact_roots": [],
     }
 
     if config_path.exists():
@@ -105,11 +107,25 @@ def load_config(repo_root: Path) -> HarnessConfig:
         if not isinstance(payload.get(field), str):
             raise SystemExit(f"Config field {field!r} in {config_path} must be a string")
 
+    metadata_redact_roots = payload.get("metadata_redact_roots", [])
+    if not isinstance(metadata_redact_roots, list):
+        raise SystemExit(
+            f"Config field 'metadata_redact_roots' in {config_path} must be a list"
+        )
+    if not all(isinstance(root, str) for root in metadata_redact_roots):
+        raise SystemExit(
+            "Config field 'metadata_redact_roots' in "
+            f"{config_path} must contain only strings"
+        )
+
     return HarnessConfig(
         vault_path=Path(payload["vault_path"]).expanduser(),
         codex_path=Path(payload["codex_path"]).expanduser(),
         model=payload["model"],
         run_dir=Path(payload["run_dir"]).expanduser(),
+        metadata_redact_roots=tuple(
+            Path(root).expanduser() for root in metadata_redact_roots
+        ),
     )
 
 
@@ -252,14 +268,19 @@ def run_doctor(config: HarnessConfig, *, json_output: bool = False) -> int:
 
 
 def run_config(config: HarnessConfig) -> int:
+    payload: dict[str, object] = {
+        "vault_path": str(config.vault_path),
+        "codex_path": str(config.codex_path),
+        "model": config.model,
+        "run_dir": str(config.run_dir),
+    }
+    if config.metadata_redact_roots:
+        payload["metadata_redact_roots"] = [
+            str(root) for root in config.metadata_redact_roots
+        ]
     print(
         json.dumps(
-            {
-                "vault_path": str(config.vault_path),
-                "codex_path": str(config.codex_path),
-                "model": config.model,
-                "run_dir": str(config.run_dir),
-            },
+            payload,
             ensure_ascii=False,
             indent=2,
         )
@@ -900,6 +921,39 @@ def build_codex_command(
     return cmd
 
 
+def normalize_metadata_redact_roots(roots: Sequence[Path]) -> tuple[str, ...]:
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for root in roots:
+        text = str(Path(root).expanduser())
+        if text != os.sep:
+            text = text.rstrip(os.sep)
+        if not text or text in seen:
+            continue
+        normalized.append(text)
+        seen.add(text)
+    return tuple(sorted(normalized, key=len, reverse=True))
+
+
+def redact_metadata_string(value: str, roots: Sequence[str]) -> str:
+    redacted = value
+    for index, root in enumerate(roots, start=1):
+        token = f"<redacted-root-{index}>"
+        if redacted == root:
+            redacted = token
+        elif root == os.sep and redacted.startswith(os.sep):
+            redacted = token
+        elif redacted.startswith(f"{root}{os.sep}"):
+            redacted = f"{token}{redacted[len(root):]}"
+    return redacted
+
+
+def redact_metadata_command(command: Sequence[str], roots: Sequence[str]) -> list[str]:
+    if not roots:
+        return list(command)
+    return [redact_metadata_string(part, roots) for part in command]
+
+
 def run_query(
     repo_root: Path,
     config: HarnessConfig,
@@ -909,6 +963,7 @@ def run_query(
     dry_run: bool,
     language: str = "zh",
     model: str | None = None,
+    metadata_redact_roots: Sequence[Path] = (),
 ) -> int:
     if model is not None:
         config = HarnessConfig(
@@ -916,6 +971,7 @@ def run_query(
             codex_path=config.codex_path,
             model=model,
             run_dir=config.run_dir,
+            metadata_redact_roots=config.metadata_redact_roots,
         )
     output_name = validate_output_name(output_name)
     if dry_run:
@@ -936,6 +992,9 @@ def run_query(
         write_output=write_output,
     )
     redacted_cmd, command_redactions = redact_command_for_metadata(cmd, repo_root, config)
+    normalized_redact_roots = normalize_metadata_redact_roots(
+        (*config.metadata_redact_roots, *metadata_redact_roots)
+    )
 
     metadata = {
         "schema_version": RUN_METADATA_SCHEMA_VERSION,
@@ -947,7 +1006,13 @@ def run_query(
         "model": config.model,
         "command": redacted_cmd,
         "command_redactions": command_redactions,
+        "command": redact_metadata_command(cmd, normalized_redact_roots),
     }
+    if normalized_redact_roots:
+        metadata["metadata_redaction"] = {
+            "enabled": True,
+            "root_count": len(normalized_redact_roots),
+        }
     (run_path / "run.json").write_text(
         json.dumps(metadata, ensure_ascii=False, indent=2), encoding="utf-8"
     )
@@ -1105,6 +1170,17 @@ def build_parser() -> argparse.ArgumentParser:
         "--model",
         help="Override the configured Codex model for this query invocation.",
     )
+    query.add_argument(
+        "--redact-metadata-root",
+        action="append",
+        default=[],
+        type=Path,
+        dest="metadata_redact_roots",
+        help=(
+            "Redact this sensitive root from command path strings stored in run.json. "
+            "Repeat for multiple roots."
+        ),
+    )
     query.set_defaults(handler="query")
 
     return parser
@@ -1175,6 +1251,7 @@ def main(argv: list[str] | None = None) -> int:
             dry_run=args.dry_run,
             language=args.language,
             model=args.model,
+            metadata_redact_roots=args.metadata_redact_roots,
         )
 
     parser.error(f"Unknown handler: {args.handler}")

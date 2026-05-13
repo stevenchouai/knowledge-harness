@@ -129,6 +129,39 @@ class LoadConfigTests(unittest.TestCase):
             self.assertEqual(config.codex_path, Path.home() / "bin" / "codex")
             self.assertEqual(config.model, "test-model")
             self.assertEqual(config.run_dir, Path.home() / "runs")
+            self.assertEqual(config.metadata_redact_roots, ())
+
+    def test_load_config_expands_metadata_redact_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            fake_private_root = root / "private-root"
+            write_harness_config(
+                root / "config",
+                metadata_redact_roots=["~/vault", str(fake_private_root)],
+            )
+
+            config = cli.load_config(root)
+
+            self.assertEqual(
+                config.metadata_redact_roots,
+                (Path.home() / "vault", fake_private_root),
+            )
+
+    def test_load_config_reports_invalid_metadata_redact_roots(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config_path = write_harness_config(
+                root / "config",
+                metadata_redact_roots=["/tmp/fake-root", 7],
+            )
+
+            with self.assertRaises(SystemExit) as raised:
+                cli.load_config(root)
+
+            message = str(raised.exception)
+            self.assertIn(str(config_path), message)
+            self.assertIn("'metadata_redact_roots'", message)
+            self.assertIn("only strings", message)
 
 
 class RunQueryDryRunValidationTests(unittest.TestCase):
@@ -266,6 +299,10 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             )
             self.assertEqual(first_metadata["question"], "First dry run?")
             self.assertEqual(second_metadata["question"], "Second dry run?")
+            self.assertEqual(metadata["command"][0], str(config.codex_path))
+            model_index = metadata["command"].index("--model")
+            self.assertEqual(metadata["command"][model_index + 1], "test-model")
+            self.assertNotIn("metadata_redaction", metadata)
 
     def test_query_model_override_updates_command_and_metadata_for_one_run(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -370,6 +407,113 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             self.assertNotIn("danger-full-access", command)
             add_dir_index = command.index("--add-dir")
             self.assertEqual(command[add_dir_index + 1], str(config.vault_path))
+
+    def test_query_redacts_configured_vault_path_from_metadata_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            vault = self.make_vault(root)
+            config = cli.HarnessConfig(
+                vault_path=vault,
+                codex_path=root / "missing-codex",
+                model="test-model",
+                run_dir=root / "runs",
+                metadata_redact_roots=(vault,),
+            )
+
+            with redirect_stdout(io.StringIO()):
+                result = cli.run_query(
+                    repo_root=repo_root,
+                    config=config,
+                    question="What should the harness do next?",
+                    output_name="answer.md",
+                    write_output=True,
+                    dry_run=True,
+                )
+
+            self.assertEqual(result, 0)
+            run_dirs = list(config.run_dir.iterdir())
+            self.assertEqual(len(run_dirs), 1)
+            metadata = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+            command = metadata["command"]
+            add_dir_index = command.index("--add-dir")
+            self.assertEqual(command[add_dir_index + 1], "<redacted-root-1>")
+            self.assertEqual(command[0], str(config.codex_path))
+            self.assertIn("--model", command)
+            self.assertIn("--output-last-message", command)
+            self.assertEqual(
+                metadata["metadata_redaction"],
+                {"enabled": True, "root_count": 1},
+            )
+            self.assertNotIn(str(vault), json.dumps(metadata))
+
+    def test_metadata_redaction_handles_root_and_prefix_boundaries(self) -> None:
+        roots = cli.normalize_metadata_redact_roots(
+            [Path("/tmp/fake"), Path("/tmp/fake"), Path(os.sep)]
+        )
+
+        self.assertEqual(roots, ("/tmp/fake", os.sep))
+        self.assertEqual(
+            cli.redact_metadata_string("/tmp/fake/child/file.md", roots),
+            "<redacted-root-1>/child/file.md",
+        )
+        self.assertEqual(
+            cli.redact_metadata_string("/tmp/fake", roots),
+            "<redacted-root-1>",
+        )
+        self.assertEqual(
+            cli.redact_metadata_string("/tmp/fake-neighbor", roots),
+            "<redacted-root-2>",
+        )
+        self.assertEqual(
+            cli.redact_metadata_string("relative/path", roots),
+            "relative/path",
+        )
+
+    def test_query_redaction_does_not_change_executed_command(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            repo_root = root / "repo"
+            repo_root.mkdir()
+            vault = self.make_vault(root)
+            codex = root / "fake-codex"
+            codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.chmod(0o755)
+            config = cli.HarnessConfig(
+                vault_path=vault,
+                codex_path=codex,
+                model="test-model",
+                run_dir=root / "runs",
+            )
+
+            completed = subprocess.CompletedProcess(args=[], returncode=0)
+            with patch.object(subprocess, "run", return_value=completed) as run:
+                with redirect_stdout(io.StringIO()):
+                    result = cli.run_query(
+                        repo_root=repo_root,
+                        config=config,
+                        question="What should the harness do next?",
+                        output_name="answer.md",
+                        write_output=True,
+                        dry_run=False,
+                        metadata_redact_roots=(vault,),
+                    )
+
+            self.assertEqual(result, 0)
+            executed_command = run.call_args.args[0]
+            add_dir_index = executed_command.index("--add-dir")
+            self.assertEqual(executed_command[add_dir_index + 1], str(vault))
+
+            run_dirs = list(config.run_dir.iterdir())
+            metadata = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+            metadata_command = metadata["command"]
+            metadata_add_dir_index = metadata_command.index("--add-dir")
+            self.assertEqual(
+                metadata_command[metadata_add_dir_index + 1],
+                "<redacted-root-1>",
+            )
+            self.assertNotIn(str(vault), json.dumps(metadata))
 
     def test_query_defaults_to_chinese_prompt_language(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -581,6 +725,24 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
         self.assertEqual(args.handler, "query")
         self.assertEqual(args.model, "model-x")
 
+    def test_parser_accepts_query_metadata_redact_roots(self) -> None:
+        args = cli.build_parser().parse_args(
+            [
+                "query",
+                "question",
+                "--redact-metadata-root",
+                "/tmp/fake-vault",
+                "--redact-metadata-root",
+                "/tmp/fake-run-root",
+            ]
+        )
+
+        self.assertEqual(args.handler, "query")
+        self.assertEqual(
+            args.metadata_redact_roots,
+            [Path("/tmp/fake-vault"), Path("/tmp/fake-run-root")],
+        )
+
     def test_parser_rejects_invalid_query_language(self) -> None:
         with redirect_stderr(io.StringIO()):
             with self.assertRaises(SystemExit):
@@ -758,7 +920,30 @@ class ConfigCommandTests(unittest.TestCase):
             self.assertEqual(payload["codex_path"], str(config.codex_path))
             self.assertEqual(payload["model"], "test-model")
             self.assertEqual(payload["run_dir"], str(config.run_dir))
+            self.assertNotIn("metadata_redact_roots", payload)
             self.assertFalse(config.run_dir.exists())
+
+    def test_config_prints_metadata_redact_roots_when_configured(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            config = cli.HarnessConfig(
+                vault_path=root / "missing-vault",
+                codex_path=root / "missing-codex",
+                model="test-model",
+                run_dir=root / "missing-runs",
+                metadata_redact_roots=(root / "fake-sensitive-root",),
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_config(config)
+
+            self.assertEqual(result, 0)
+            payload = json.loads(output.getvalue())
+            self.assertEqual(
+                payload["metadata_redact_roots"],
+                [str(root / "fake-sensitive-root")],
+            )
 
     def test_parser_accepts_config_subcommand(self) -> None:
         args = cli.build_parser().parse_args(["config"])
