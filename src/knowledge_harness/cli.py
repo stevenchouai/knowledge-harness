@@ -201,15 +201,21 @@ def build_doctor_status(config: HarnessConfig) -> dict[str, object]:
         config.vault_path / "PROMPTS.md",
         config.vault_path / "wiki" / "_index.md",
     ]
+    vault_ok = all(path.exists() for path in vault_files)
+    codex_ok = config.codex_path.exists()
+    model_ok = bool(config.model.strip())
+    run_dir_ok = config.run_dir.exists() or config.run_dir.parent.exists()
     return {
+        "ok": vault_ok and codex_ok and model_ok and run_dir_ok,
         "vault_path": str(config.vault_path),
-        "vault_ok": all(path.exists() for path in vault_files),
+        "vault_ok": vault_ok,
         "missing_vault_files": [str(path) for path in vault_files if not path.exists()],
         "codex_path": str(config.codex_path),
-        "codex_ok": config.codex_path.exists(),
+        "codex_ok": codex_ok,
         "model": config.model,
+        "model_ok": model_ok,
         "run_dir": str(config.run_dir),
-        "run_dir_ok": config.run_dir.exists() or config.run_dir.parent.exists(),
+        "run_dir_ok": run_dir_ok,
     }
 
 
@@ -217,7 +223,7 @@ def run_doctor(config: HarnessConfig, *, json_output: bool = False) -> int:
     if json_output:
         status = build_doctor_status(config)
         print(json.dumps(status, ensure_ascii=False, indent=2))
-        return 0 if status["vault_ok"] and status["codex_ok"] else 1
+        return 0 if status["ok"] else 1
 
     ensure_workspace(config)
     print("knowledge-harness doctor")

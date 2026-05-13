@@ -366,6 +366,35 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
 
             self.assertIn("Codex binary not found", str(raised.exception))
 
+    def test_doctor_default_keeps_human_readable_output(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            codex = root / "fake-codex"
+            codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.chmod(0o755)
+            config = cli.HarnessConfig(
+                vault_path=self.make_vault(root),
+                codex_path=codex,
+                model="test-model",
+                run_dir=root / "runs",
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_doctor(config)
+
+            self.assertEqual(result, 0)
+            self.assertEqual(
+                output.getvalue().splitlines(),
+                [
+                    "knowledge-harness doctor",
+                    f"vault_path: {config.vault_path}",
+                    f"codex_path: {config.codex_path}",
+                    "model: test-model",
+                    f"run_dir: {config.run_dir}",
+                ],
+            )
+
     def test_doctor_json_reports_status_without_raising(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
             root = Path(tmpdir)
@@ -377,12 +406,15 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
 
             self.assertEqual(result, 1)
             payload = json.loads(output.getvalue())
+            self.assertFalse(payload["ok"])
             self.assertTrue(payload["vault_ok"])
             self.assertEqual(payload["missing_vault_files"], [])
             self.assertEqual(payload["codex_path"], str(config.codex_path))
             self.assertFalse(payload["codex_ok"])
             self.assertEqual(payload["model"], "test-model")
+            self.assertTrue(payload["model_ok"])
             self.assertEqual(payload["run_dir"], str(config.run_dir))
+            self.assertTrue(payload["run_dir_ok"])
 
     def test_doctor_json_returns_zero_when_required_paths_exist(self) -> None:
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -397,10 +429,44 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
                 run_dir=root / "runs",
             )
 
-            with redirect_stdout(io.StringIO()):
+            output = io.StringIO()
+            with redirect_stdout(output):
                 result = cli.run_doctor(config, json_output=True)
 
             self.assertEqual(result, 0)
+            payload = json.loads(output.getvalue())
+            self.assertTrue(payload["ok"])
+            self.assertTrue(payload["vault_ok"])
+            self.assertTrue(payload["codex_ok"])
+            self.assertTrue(payload["model_ok"])
+            self.assertTrue(payload["run_dir_ok"])
+
+    def test_doctor_json_reports_model_and_run_directory_status(self) -> None:
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            codex = root / "fake-codex"
+            codex.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
+            codex.chmod(0o755)
+            config = cli.HarnessConfig(
+                vault_path=self.make_vault(root),
+                codex_path=codex,
+                model="",
+                run_dir=root / "missing-parent" / "runs",
+            )
+
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.run_doctor(config, json_output=True)
+
+            self.assertEqual(result, 1)
+            payload = json.loads(output.getvalue())
+            self.assertFalse(payload["ok"])
+            self.assertTrue(payload["vault_ok"])
+            self.assertTrue(payload["codex_ok"])
+            self.assertEqual(payload["model"], "")
+            self.assertFalse(payload["model_ok"])
+            self.assertEqual(payload["run_dir"], str(config.run_dir))
+            self.assertFalse(payload["run_dir_ok"])
 
     def test_parser_accepts_doctor_json(self) -> None:
         args = cli.build_parser().parse_args(["doctor", "--json"])
