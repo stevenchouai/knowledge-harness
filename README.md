@@ -145,6 +145,23 @@ machine-readable health gate for the vault path, Codex binary, model, and run
 directory. It preserves the default human-readable `doctor` output for manual
 setup checks.
 
+Example JSON output:
+
+```json
+{
+  "ok": false,
+  "vault_path": "/example/KnowledgeVault",
+  "vault_ok": true,
+  "missing_vault_files": [],
+  "codex_path": "/example/codex",
+  "codex_ok": false,
+  "model": "gpt-5.4",
+  "model_ok": true,
+  "run_dir": "/example/knowledge-harness/runs",
+  "run_dir_ok": true
+}
+```
+
 Use `knowledge-harness config` when you only need to inspect the effective local
 wiring as JSON. It does not require the configured vault, Codex binary, or run
 directory to exist, so it is safe for setup/debugging before `doctor`.
