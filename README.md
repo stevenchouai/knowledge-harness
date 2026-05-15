@@ -203,6 +203,9 @@ knowledge-harness query \
 4. Stores the prompt and metadata under `runs/<timestamp>/`
 5. Optionally allows Codex to write the final answer back to `wiki/outputs/`
 
+`knowledge-harness prompt` stops after prompt assembly: it prints the prompt to
+stdout, does not invoke Codex, and does not create `runs/` artifacts.
+
 The `vault-health` command does not call Codex and does not write run artifacts.
 It treats orphan notes conservatively as markdown notes with no incoming or
 outgoing note wikilinks. Non-markdown wikilink targets, such as images, are

@@ -685,13 +685,10 @@ def run_demo(
 def run_prompt(
     config: HarnessConfig,
     question: str,
-    output_name: str | None,
-    write_output: bool,
     language: str = "zh",
 ) -> int:
-    output_name = validate_output_name(output_name)
     ensure_vault_contract(config)
-    print(build_query_prompt(config, question, output_name, write_output, language))
+    print(build_query_prompt(config, question, None, False, language))
     return 0
 
 
@@ -1040,15 +1037,6 @@ def build_parser() -> argparse.ArgumentParser:
     )
     prompt.add_argument("question", help="The question to ask the digital twin.")
     prompt.add_argument(
-        "--output-name",
-        help="Optional filename under wiki/outputs/ when write-output is enabled.",
-    )
-    prompt.add_argument(
-        "--write-output",
-        action="store_true",
-        help="Include the vault write instruction in the printed prompt.",
-    )
-    prompt.add_argument(
         "--language",
         choices=LANGUAGE_CHOICES,
         default="zh",
@@ -1158,8 +1146,6 @@ def main(argv: list[str] | None = None) -> int:
         return run_prompt(
             config=config,
             question=args.question,
-            output_name=args.output_name,
-            write_output=args.write_output,
             language=args.language,
         )
 
