@@ -198,6 +198,20 @@ def make_run_stamp() -> str:
     return datetime.now().strftime("%Y%m%d-%H%M%S")
 
 
+def create_run_dir(run_root: Path) -> Path:
+    stamp = make_run_stamp()
+    for suffix in range(0, sys.maxsize):
+        run_name = stamp if suffix == 0 else f"{stamp}-{suffix}"
+        run_path = run_root / run_name
+        try:
+            run_path.mkdir(parents=True, exist_ok=False)
+        except FileExistsError:
+            continue
+        return run_path
+
+    raise SystemExit(f"Could not create a unique run directory under {run_root}")
+
+
 def build_doctor_status(config: HarnessConfig) -> dict[str, object]:
     vault_files = [
         config.vault_path / "AGENTS.md",
@@ -844,10 +858,7 @@ def run_query(
         ensure_vault_contract(config)
     else:
         ensure_workspace(config)
-    config.run_dir.mkdir(parents=True, exist_ok=True)
-    stamp = make_run_stamp()
-    run_path = config.run_dir / stamp
-    run_path.mkdir(parents=True, exist_ok=True)
+    run_path = create_run_dir(config.run_dir)
 
     prompt = build_query_prompt(config, question, output_name, write_output, language)
     prompt_path = run_path / "prompt.txt"
