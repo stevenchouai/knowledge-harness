@@ -1,0 +1,482 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>knowledge-harness 90-second visitor tour</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #171916;
+        --muted: #5d665e;
+        --paper: #fbf8ef;
+        --panel: #ffffff;
+        --line: #d8d0bf;
+        --green: #11634f;
+        --green-soft: #dfefe7;
+        --rust: #b74e34;
+        --rust-soft: #f5dfd4;
+        --blue: #234f75;
+        --blue-soft: #dce8f2;
+        --shadow: rgba(23, 25, 22, 0.12);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html {
+        scroll-behavior: smooth;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(115deg, rgba(17, 99, 79, 0.1), transparent 42%),
+          linear-gradient(235deg, rgba(183, 78, 52, 0.12), transparent 46%),
+          var(--paper);
+        color: var(--ink);
+        font-family: Athelas, Charter, "Bitstream Charter", Cambria, Georgia, serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: var(--green);
+        font-weight: 700;
+        text-decoration-thickness: 0.08em;
+        text-underline-offset: 0.18em;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 44px 0 56px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.45fr) minmax(280px, 0.8fr);
+        gap: 28px;
+        align-items: end;
+        padding: 22px 0 30px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--green);
+        font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p {
+        overflow-wrap: anywhere;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 12ch;
+        font-size: clamp(44px, 8vw, 94px);
+        line-height: 0.92;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        margin: 18px 0 0;
+        max-width: 70ch;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .proof-strip {
+        display: grid;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      .proof-strip li {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 11px 12px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 10px 30px rgba(23, 25, 22, 0.06);
+      }
+
+      .proof-strip span {
+        color: var(--muted);
+      }
+
+      .proof-strip strong {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        text-align: right;
+      }
+
+      .links {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px;
+        margin-top: 22px;
+      }
+
+      .links a {
+        display: inline-flex;
+        align-items: center;
+        min-height: 40px;
+        padding: 8px 12px;
+        border: 1px solid var(--line);
+        background: var(--panel);
+        color: var(--ink);
+        font: 700 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        text-decoration: none;
+      }
+
+      .flow {
+        display: grid;
+        gap: 16px;
+        margin-top: 32px;
+      }
+
+      .step {
+        display: grid;
+        grid-template-columns: 88px minmax(0, 1fr) minmax(260px, 0.76fr);
+        gap: 18px;
+        align-items: stretch;
+        padding: 20px;
+        border: 1px solid var(--line);
+        background: rgba(255, 255, 255, 0.84);
+        box-shadow: 0 18px 44px rgba(23, 25, 22, 0.08);
+      }
+
+      .step-number {
+        display: grid;
+        place-items: center;
+        min-height: 88px;
+        border: 2px solid var(--ink);
+        background: var(--paper);
+        font: 800 30px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .step h2 {
+        margin: 0;
+        font-size: clamp(24px, 4vw, 44px);
+        line-height: 0.98;
+        letter-spacing: 0;
+      }
+
+      .step p {
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+
+      .evidence {
+        display: grid;
+        align-content: start;
+        gap: 10px;
+        padding: 14px;
+        border-left: 4px solid var(--green);
+        background: var(--green-soft);
+      }
+
+      .step:nth-child(2n) .evidence {
+        border-left-color: var(--blue);
+        background: var(--blue-soft);
+      }
+
+      .step:nth-child(3n) .evidence {
+        border-left-color: var(--rust);
+        background: var(--rust-soft);
+      }
+
+      .evidence h3 {
+        margin: 0;
+        font-size: 14px;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      code,
+      pre {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      code {
+        font-size: 0.94em;
+      }
+
+      pre {
+        margin: 0;
+        white-space: pre-wrap;
+        word-break: break-word;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .chips {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+        padding: 0;
+        margin: 0;
+        list-style: none;
+      }
+
+      .chips li {
+        padding: 6px 8px;
+        border: 1px solid rgba(23, 25, 22, 0.2);
+        background: rgba(255, 255, 255, 0.6);
+        font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .formats {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+      }
+
+      .format {
+        padding: 12px;
+        border: 1px solid rgba(23, 25, 22, 0.22);
+        background: rgba(255, 255, 255, 0.64);
+      }
+
+      .format strong {
+        display: block;
+        margin-bottom: 6px;
+        font-size: 16px;
+      }
+
+      .format span {
+        display: block;
+        color: var(--muted);
+        font-size: 13px;
+      }
+
+      .boundary {
+        margin-top: 28px;
+        padding: 24px;
+        border: 2px solid var(--ink);
+        background: #f4efe4;
+      }
+
+      .boundary h2 {
+        margin: 0;
+        font-size: clamp(28px, 5vw, 58px);
+        line-height: 0.95;
+        letter-spacing: 0;
+      }
+
+      .boundary p {
+        margin: 14px 0 0;
+        max-width: 82ch;
+        color: var(--muted);
+      }
+
+      @media (max-width: 860px) {
+        .hero,
+        .step {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          max-width: 100%;
+        }
+
+        .step-number {
+          width: 88px;
+        }
+
+        .formats {
+          grid-template-columns: 1fr;
+        }
+      }
+
+      @media (max-width: 560px) {
+        main {
+          width: min(100% - 20px, 1120px);
+          padding: 20px 0 36px;
+        }
+
+        .step,
+        .boundary {
+          padding: 16px;
+        }
+
+        .proof-strip li {
+          display: grid;
+        }
+
+        .proof-strip strong {
+          text-align: left;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="tour-title">
+        <div>
+          <p class="eyebrow">90-second public tour</p>
+          <h1 id="tour-title">knowledge-harness without Steven's vault</h1>
+          <p class="summary">
+            This page is a static, public-safe walkthrough for a cold GitHub visitor.
+            It shows how the demo turns a sanitized fake Obsidian vault into a prompt,
+            run metadata, and proof receipts while proving it did not read private
+            vault content or call Codex.
+          </p>
+          <nav class="links" aria-label="Related demo pages">
+            <a href="../README.md">README demo section</a>
+            <a href="../docs/FAKE_VAULT_DEMO.md">Fake vault demo</a>
+            <a href="demo-receipt.html">Sample HTML receipt</a>
+          </nav>
+        </div>
+
+        <ul class="proof-strip" aria-label="Public safety flags">
+          <li><span>Source vault</span><strong>fake-vault only</strong></li>
+          <li><span>Mode</span><strong>dry_run=true</strong></li>
+          <li><span>Codex process</span><strong>codex_used=false</strong></li>
+          <li><span>Vault boundary</span><strong>real_vault_used=false</strong></li>
+        </ul>
+      </section>
+
+      <section class="flow" aria-label="Demo flow">
+        <article class="step">
+          <div class="step-number" aria-hidden="true">01</div>
+          <div>
+            <h2>Fake vault contract files</h2>
+            <p>
+              The demo starts by creating only the contract files the harness expects:
+              <code>AGENTS.md</code>, <code>PROMPTS.md</code>, and
+              <code>wiki/_index.md</code>. These files are tiny, sanitized, and made for
+              public inspection.
+            </p>
+          </div>
+          <div class="evidence">
+            <h3>Contract surface</h3>
+            <pre>fake-vault/
+  AGENTS.md
+  PROMPTS.md
+  wiki/_index.md</pre>
+          </div>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true">02</div>
+          <div>
+            <h2>Dry-run prompt assembly</h2>
+            <p>
+              <code>knowledge-harness demo</code> points the harness at that fake vault
+              and assembles the same prompt shape used by real queries. The dry-run path
+              writes <code>prompt.txt</code> but stops before any model invocation.
+            </p>
+          </div>
+          <div class="evidence">
+            <h3>Prompt proof</h3>
+            <pre>prompt_file:
+$TMPDIR/knowledge-harness-demo-SAMPLE/runs/20260510-120000/prompt.txt
+
+contains:
+fake AGENTS.md
+fake PROMPTS.md
+fake wiki/_index.md</pre>
+          </div>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true">03</div>
+          <div>
+            <h2>Run metadata and safety flags</h2>
+            <p>
+              The run metadata records the prepared command and safety flags. The public
+              proof is that <code>write_output=false</code>, <code>dry_run=true</code>,
+              no <code>--add-dir</code> vault grant appears, and the demo Codex path is
+              intentionally missing.
+            </p>
+          </div>
+          <div class="evidence">
+            <h3>run.json checks</h3>
+            <ul class="chips">
+              <li>real_vault_used=false</li>
+              <li>codex_used=false</li>
+              <li>write_output=false</li>
+              <li>dry_run=true</li>
+              <li>no --add-dir</li>
+            </ul>
+          </div>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true">04</div>
+          <div>
+            <h2>Receipt formats for humans and tools</h2>
+            <p>
+              The demo can print the same proof as HTML, Markdown, or JSON. HTML is a
+              browser-friendly card, Markdown is copy/pasteable for a README or review
+              thread, and JSON is machine-readable for automation.
+            </p>
+          </div>
+          <div class="evidence">
+            <h3>Receipt formats</h3>
+            <div class="formats">
+              <div class="format">
+                <strong>HTML</strong>
+                <span><code>knowledge-harness demo --html</code></span>
+              </div>
+              <div class="format">
+                <strong>Markdown</strong>
+                <span><code>knowledge-harness demo --markdown</code></span>
+              </div>
+              <div class="format">
+                <strong>JSON</strong>
+                <span><code>knowledge-harness demo --json</code></span>
+              </div>
+            </div>
+          </div>
+        </article>
+
+        <article class="step">
+          <div class="step-number" aria-hidden="true">05</div>
+          <div>
+            <h2>Cleanup and no private data boundary</h2>
+            <p>
+              Everything is created under a temporary demo root. The receipt prints the
+              cleanup command, and the only vault files in scope are the fake contract
+              files above. No real Obsidian vault is read, no local config is rewritten,
+              and no private notes are copied into this repository.
+            </p>
+          </div>
+          <div class="evidence">
+            <h3>Boundary check</h3>
+            <pre>cleanup:
+rm -rf $TMPDIR/knowledge-harness-demo-SAMPLE
+
+private vault:
+not opened
+
+Codex:
+not called</pre>
+          </div>
+        </article>
+      </section>
+
+      <section class="boundary" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">What a visitor should remember</h2>
+        <p>
+          <code>knowledge-harness</code> is concrete memory-runtime tooling. The public
+          demo proves prompt assembly, run metadata, safety flags, and receipts with a
+          fake vault, so the repo can explain the system without exposing private vault
+          content or requiring Python installation.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>

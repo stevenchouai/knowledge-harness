@@ -43,10 +43,65 @@ python3 -m pip install -e .
 knowledge-harness demo
 ```
 
+No Python yet? Open [examples/index.html](examples/index.html) in a browser for
+the easiest public-safe demo path.
+
 The demo creates a temporary fake vault, assembles a dry-run prompt, writes
 temporary run metadata, and prints the evidence paths. It does not read a real
 Obsidian vault, does not require Codex, and does not edit `config/harness.json`.
-For a copy/pasteable proof receipt, use:
+For a quick browser-friendly proof card, use:
+
+```bash
+knowledge-harness demo --html
+```
+
+It prints a static, self-contained HTML receipt with the command, fake vault
+path, run paths, safety claims, evidence checklist, and cleanup command. The
+committed public-safe sample is [examples/demo-receipt.html](examples/demo-receipt.html).
+For the shortest no-install proof flow, open the
+[one-minute demo](examples/one-minute-demo.html).
+For a no-install overview of the whole proof flow, open the
+[90-second visitor tour](examples/visitor-tour.html).
+
+To save a local proof page you can open or share as a file, use:
+
+```bash
+knowledge-harness demo --save-html /tmp/kh-demo/receipt.html
+```
+
+It writes the same self-contained receipt to that path and prints a cleanup
+command instead of dumping the HTML to the terminal.
+
+For a copy/pasteable proof receipt in a README, issue, or audit note, use:
+
+```bash
+knowledge-harness demo --markdown
+```
+
+It prints Markdown with the command, fake vault path, run paths, safety claims,
+evidence to check, and cleanup command:
+
+```markdown
+# knowledge-harness demo receipt
+
+command: `knowledge-harness demo --markdown`
+
+## Paths
+
+- fake_vault: `/tmp/knowledge-harness-demo-.../fake-vault`
+- run_dir: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS`
+- prompt_file: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/prompt.txt`
+- metadata_file: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/run.json`
+
+## Safety claims
+
+- `real_vault_used=false`
+- `codex_used=false`
+- `write_output=false`
+- `dry_run=true`
+```
+
+For automation that needs a machine-readable proof receipt, use:
 
 ```bash
 knowledge-harness demo --json

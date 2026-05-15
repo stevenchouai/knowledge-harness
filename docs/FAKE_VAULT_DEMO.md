@@ -30,13 +30,65 @@ Use the printed `prompt_file` and `metadata_file` paths to inspect the evidence.
 The command does not read `config/harness.json`, does not edit it, and does not
 invoke Codex.
 
+For a browser-friendly static proof receipt, run:
+
+```bash
+knowledge-harness demo --html
+```
+
+The HTML output is self-contained: inline styles only, no scripts, no external
+assets, and no network-loading links. It shows the command, fake vault path, run
+directory, prompt file, metadata file, safety claims, evidence checklist, and
+cleanup command. A committed sanitized sample is available at
+[examples/demo-receipt.html](../examples/demo-receipt.html).
+For a no-install visual overview of the fake vault, dry-run prompt, metadata,
+receipt, and cleanup boundary, open the
+[90-second visitor tour](../examples/visitor-tour.html).
+
+For a copy/pasteable Markdown proof receipt, run:
+
+```bash
+knowledge-harness demo --markdown
+```
+
+Use Markdown when a human needs to paste the receipt into a README, GitHub
+issue, audit note, or chat thread:
+
+```markdown
+# knowledge-harness demo receipt
+
+command: `knowledge-harness demo --markdown`
+
+## Paths
+
+- fake_vault: `/tmp/knowledge-harness-demo-.../fake-vault`
+- run_dir: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS`
+- prompt_file: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/prompt.txt`
+- metadata_file: `/tmp/knowledge-harness-demo-.../runs/YYYYMMDD-HHMMSS/run.json`
+
+## Safety claims
+
+- `real_vault_used=false`
+- `codex_used=false`
+- `write_output=false`
+- `dry_run=true`
+
+## Evidence to check
+
+- `prompt_file` contains the fake vault contracts and demo question.
+- `metadata_file` records `dry_run=true` and `write_output=false`.
+- `metadata_file` records a missing demo Codex path and no `--add-dir` vault grant.
+- `run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.
+```
+
 For a machine-readable proof receipt, run:
 
 ```bash
 knowledge-harness demo --json
 ```
 
-Expected output is JSON like:
+Use JSON when another script, CI job, or agent needs to parse paths and safety
+booleans. Expected output is JSON like:
 
 ```json
 {

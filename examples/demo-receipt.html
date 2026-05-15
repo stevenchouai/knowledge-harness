@@ -1,0 +1,202 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>knowledge-harness demo receipt</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #17211b;
+        --muted: #5a665f;
+        --paper: #fbfaf5;
+        --line: #d9d1bf;
+        --accent: #0f6b57;
+        --accent-soft: #e1f0e8;
+        --panel: #ffffff;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(135deg, rgba(15, 107, 87, 0.08), rgba(206, 86, 58, 0.07)),
+          var(--paper);
+        color: var(--ink);
+        font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+        line-height: 1.5;
+      }
+      main {
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }
+      .receipt {
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 18px 60px rgba(23, 33, 27, 0.12);
+        overflow: hidden;
+      }
+      .header {
+        padding: 28px;
+        border-bottom: 1px solid var(--line);
+        background: #f4efe4;
+      }
+      .eyebrow {
+        margin: 0 0 8px;
+        color: var(--accent);
+        font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+      h1 {
+        margin: 0;
+        font-size: clamp(30px, 4vw, 52px);
+        line-height: 1;
+        letter-spacing: 0;
+      }
+      .status {
+        margin: 16px 0 0;
+        color: var(--muted);
+        max-width: 64ch;
+      }
+      section {
+        padding: 24px 28px;
+        border-bottom: 1px solid var(--line);
+      }
+      section:last-child {
+        border-bottom: 0;
+      }
+      h2 {
+        margin: 0 0 14px;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.94em;
+        word-break: break-word;
+      }
+      .command {
+        display: block;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #18221c;
+        color: #f8f4e9;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+      th, td {
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }
+      th {
+        width: 180px;
+        padding-right: 16px;
+        color: var(--muted);
+        font-weight: 700;
+      }
+      ul {
+        margin: 0;
+        padding-left: 20px;
+      }
+      li + li {
+        margin-top: 8px;
+      }
+      .claims {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+        padding: 0;
+        list-style: none;
+      }
+      .claims li {
+        margin: 0;
+        padding: 10px 12px;
+        border: 1px solid #b8dccb;
+        border-radius: 6px;
+        background: var(--accent-soft);
+      }
+      @media (max-width: 640px) {
+        main {
+          width: min(100% - 20px, 960px);
+          padding: 20px 0;
+        }
+        .header,
+        section {
+          padding: 20px;
+        }
+        th, td {
+          display: block;
+          width: 100%;
+          padding: 8px 0;
+        }
+        td {
+          border-top: 0;
+          padding-bottom: 14px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <article class="receipt" aria-labelledby="receipt-title">
+        <header class="header">
+          <p class="eyebrow">Public-safe proof</p>
+          <h1 id="receipt-title">knowledge-harness demo receipt</h1>
+          <p class="status">no real vault or Codex was used</p>
+        </header>
+
+        <section aria-labelledby="command-title">
+          <h2 id="command-title">Command</h2>
+          <code class="command">knowledge-harness demo --html</code>
+        </section>
+
+        <section aria-labelledby="paths-title">
+          <h2 id="paths-title">Evidence Paths</h2>
+          <table>
+            <tbody>
+              <tr><th scope="row">Fake vault path</th><td><code>/tmp/knowledge-harness-demo-SAMPLE/fake-vault</code></td></tr>
+              <tr><th scope="row">Run directory</th><td><code>/tmp/knowledge-harness-demo-SAMPLE/runs/20260510-120000</code></td></tr>
+              <tr><th scope="row">Prompt file</th><td><code>/tmp/knowledge-harness-demo-SAMPLE/runs/20260510-120000/prompt.txt</code></td></tr>
+              <tr><th scope="row">Metadata file</th><td><code>/tmp/knowledge-harness-demo-SAMPLE/runs/20260510-120000/run.json</code></td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section aria-labelledby="claims-title">
+          <h2 id="claims-title">Safety Claims</h2>
+          <ul class="claims">
+          <li><code>real_vault_used=false</code></li>
+          <li><code>codex_used=false</code></li>
+          <li><code>write_output=false</code></li>
+          <li><code>dry_run=true</code></li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="checklist-title">
+          <h2 id="checklist-title">Evidence Checklist</h2>
+          <ul>
+          <li>`prompt_file` contains the fake vault contracts and demo question.</li>
+          <li>`metadata_file` records `dry_run=true` and `write_output=false`.</li>
+          <li>`metadata_file` records a missing demo Codex path and no `--add-dir` vault grant.</li>
+          <li>`run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.</li>
+          </ul>
+        </section>
+
+        <section aria-labelledby="cleanup-title">
+          <h2 id="cleanup-title">Cleanup</h2>
+          <code>rm -rf /tmp/knowledge-harness-demo-SAMPLE</code>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>

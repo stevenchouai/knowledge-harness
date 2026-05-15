@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import argparse
+import html
 import io
 import json
 import os
+import re
 import shlex
 import subprocess
 import sys
@@ -300,11 +302,301 @@ def build_demo_receipt(demo_root: Path, fake_vault: Path, run_path: Path) -> dic
     }
 
 
+def format_demo_markdown_receipt(receipt: dict[str, object]) -> str:
+    safety_claims = (
+        ("real_vault_used", receipt["real_vault_used"]),
+        ("codex_used", receipt["codex_used"]),
+        ("write_output", receipt["write_output"]),
+        ("dry_run", receipt["dry_run"]),
+    )
+    safety_lines = [
+        f"- `{key}={str(value).lower()}`" for key, value in safety_claims
+    ]
+    lines = [
+        "# knowledge-harness demo receipt",
+        "",
+        "command: `knowledge-harness demo --markdown`",
+        "",
+        "## Paths",
+        "",
+        f"- fake_vault: `{receipt['fake_vault']}`",
+        f"- run_dir: `{receipt['run_dir']}`",
+        f"- prompt_file: `{receipt['prompt_file']}`",
+        f"- metadata_file: `{receipt['metadata_file']}`",
+        "",
+        "## Safety claims",
+        "",
+        *safety_lines,
+        "",
+        "## Evidence to check",
+        "",
+        "- `prompt_file` contains the fake vault contracts and demo question.",
+        "- `metadata_file` records `dry_run=true` and `write_output=false`.",
+        "- `metadata_file` records a missing demo Codex path and no `--add-dir` vault grant.",
+        "- `run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.",
+        "",
+        "## Cleanup",
+        "",
+        f"cleanup_command: `{receipt['cleanup_command']}`",
+    ]
+    return "\n".join(lines)
+
+
+def html_escape(value: object) -> str:
+    escaped = html.escape(str(value), quote=True)
+    for pattern in (r"javascript:", r"https://", r"http://"):
+        escaped = re.sub(
+            pattern,
+            lambda match: match.group(0).replace(":", "&#58;", 1),
+            escaped,
+            flags=re.IGNORECASE,
+        )
+    for pattern in (r"onload=", r"onclick="):
+        escaped = re.sub(
+            pattern,
+            lambda match: match.group(0).replace("=", "&#61;", 1),
+            escaped,
+            flags=re.IGNORECASE,
+        )
+    return escaped
+
+
+def format_demo_html_receipt(receipt: dict[str, object]) -> str:
+    safety_claims = (
+        ("real_vault_used", receipt["real_vault_used"]),
+        ("codex_used", receipt["codex_used"]),
+        ("write_output", receipt["write_output"]),
+        ("dry_run", receipt["dry_run"]),
+    )
+    safety_items = "\n".join(
+        "          "
+        f"<li><code>{html_escape(key)}={html_escape(str(value).lower())}</code></li>"
+        for key, value in safety_claims
+    )
+    paths = (
+        ("Fake vault path", receipt["fake_vault"]),
+        ("Run directory", receipt["run_dir"]),
+        ("Prompt file", receipt["prompt_file"]),
+        ("Metadata file", receipt["metadata_file"]),
+    )
+    path_rows = "\n".join(
+        "              "
+        f"<tr><th scope=\"row\">{html_escape(label)}</th>"
+        f"<td><code>{html_escape(value)}</code></td></tr>"
+        for label, value in paths
+    )
+    evidence_items = (
+        "`prompt_file` contains the fake vault contracts and demo question.",
+        "`metadata_file` records `dry_run=true` and `write_output=false`.",
+        "`metadata_file` records a missing demo Codex path and no `--add-dir` vault grant.",
+        "`run_dir` has no `last_message.txt`, which dry runs would only create if Codex ran.",
+    )
+    evidence_lines = "\n".join(
+        f"          <li>{html_escape(item)}</li>" for item in evidence_items
+    )
+    return f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>knowledge-harness demo receipt</title>
+    <style>
+      :root {{
+        color-scheme: light;
+        --ink: #17211b;
+        --muted: #5a665f;
+        --paper: #fbfaf5;
+        --line: #d9d1bf;
+        --accent: #0f6b57;
+        --accent-soft: #e1f0e8;
+        --panel: #ffffff;
+      }}
+      * {{
+        box-sizing: border-box;
+      }}
+      body {{
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(135deg, rgba(15, 107, 87, 0.08), rgba(206, 86, 58, 0.07)),
+          var(--paper);
+        color: var(--ink);
+        font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+        line-height: 1.5;
+      }}
+      main {{
+        width: min(960px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 48px 0;
+      }}
+      .receipt {{
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--panel);
+        box-shadow: 0 18px 60px rgba(23, 33, 27, 0.12);
+        overflow: hidden;
+      }}
+      .header {{
+        padding: 28px;
+        border-bottom: 1px solid var(--line);
+        background: #f4efe4;
+      }}
+      .eyebrow {{
+        margin: 0 0 8px;
+        color: var(--accent);
+        font: 700 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }}
+      h1 {{
+        margin: 0;
+        font-size: clamp(30px, 4vw, 52px);
+        line-height: 1;
+        letter-spacing: 0;
+      }}
+      .status {{
+        margin: 16px 0 0;
+        color: var(--muted);
+        max-width: 64ch;
+      }}
+      section {{
+        padding: 24px 28px;
+        border-bottom: 1px solid var(--line);
+      }}
+      section:last-child {{
+        border-bottom: 0;
+      }}
+      h2 {{
+        margin: 0 0 14px;
+        font-size: 18px;
+        letter-spacing: 0;
+      }}
+      code {{
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.94em;
+        word-break: break-word;
+      }}
+      .command {{
+        display: block;
+        padding: 12px 14px;
+        border: 1px solid var(--line);
+        border-radius: 6px;
+        background: #18221c;
+        color: #f8f4e9;
+      }}
+      table {{
+        width: 100%;
+        border-collapse: collapse;
+      }}
+      th, td {{
+        padding: 12px 0;
+        border-top: 1px solid var(--line);
+        text-align: left;
+        vertical-align: top;
+      }}
+      th {{
+        width: 180px;
+        padding-right: 16px;
+        color: var(--muted);
+        font-weight: 700;
+      }}
+      ul {{
+        margin: 0;
+        padding-left: 20px;
+      }}
+      li + li {{
+        margin-top: 8px;
+      }}
+      .claims {{
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+        gap: 10px;
+        padding: 0;
+        list-style: none;
+      }}
+      .claims li {{
+        margin: 0;
+        padding: 10px 12px;
+        border: 1px solid #b8dccb;
+        border-radius: 6px;
+        background: var(--accent-soft);
+      }}
+      @media (max-width: 640px) {{
+        main {{
+          width: min(100% - 20px, 960px);
+          padding: 20px 0;
+        }}
+        .header,
+        section {{
+          padding: 20px;
+        }}
+        th, td {{
+          display: block;
+          width: 100%;
+          padding: 8px 0;
+        }}
+        td {{
+          border-top: 0;
+          padding-bottom: 14px;
+        }}
+      }}
+    </style>
+  </head>
+  <body>
+    <main>
+      <article class="receipt" aria-labelledby="receipt-title">
+        <header class="header">
+          <p class="eyebrow">Public-safe proof</p>
+          <h1 id="receipt-title">knowledge-harness demo receipt</h1>
+          <p class="status">{html_escape(receipt["status"])}</p>
+        </header>
+
+        <section aria-labelledby="command-title">
+          <h2 id="command-title">Command</h2>
+          <code class="command">knowledge-harness demo --html</code>
+        </section>
+
+        <section aria-labelledby="paths-title">
+          <h2 id="paths-title">Evidence Paths</h2>
+          <table>
+            <tbody>
+{path_rows}
+            </tbody>
+          </table>
+        </section>
+
+        <section aria-labelledby="claims-title">
+          <h2 id="claims-title">Safety Claims</h2>
+          <ul class="claims">
+{safety_items}
+          </ul>
+        </section>
+
+        <section aria-labelledby="checklist-title">
+          <h2 id="checklist-title">Evidence Checklist</h2>
+          <ul>
+{evidence_lines}
+          </ul>
+        </section>
+
+        <section aria-labelledby="cleanup-title">
+          <h2 id="cleanup-title">Cleanup</h2>
+          <code>{html_escape(receipt["cleanup_command"])}</code>
+        </section>
+      </article>
+    </main>
+  </body>
+</html>"""
+
+
 def run_demo(
     repo_root: Path,
     demo_root: Path | None = None,
     *,
     json_output: bool = False,
+    markdown_output: bool = False,
+    html_output: bool = False,
+    save_html: Path | None = None,
 ) -> int:
     if demo_root is None:
         demo_root = Path(tempfile.mkdtemp(prefix="knowledge-harness-demo-"))
@@ -339,6 +631,21 @@ def run_demo(
     receipt = build_demo_receipt(demo_root, fake_vault, run_path)
     if json_output:
         print(json.dumps(receipt, ensure_ascii=False, indent=2))
+        return 0
+    if markdown_output:
+        print(format_demo_markdown_receipt(receipt))
+        return 0
+    if html_output:
+        print(format_demo_html_receipt(receipt))
+        return 0
+    if save_html is not None:
+        save_html = save_html.expanduser()
+        save_html.parent.mkdir(parents=True, exist_ok=True)
+        save_html.write_text(format_demo_html_receipt(receipt), encoding="utf-8")
+        print("knowledge-harness demo")
+        print(f"saved_html: {save_html}")
+        print(f"status: {receipt['status']}")
+        print(f"cleanup: {receipt['cleanup_command']}")
         return 0
 
     print("knowledge-harness demo")
@@ -617,11 +924,31 @@ def build_parser() -> argparse.ArgumentParser:
         "demo",
         help="Run a public-safe fake vault dry run without Codex or local config edits.",
     )
-    demo.add_argument(
+    demo_output = demo.add_mutually_exclusive_group()
+    demo_output.add_argument(
         "--json",
         action="store_true",
         dest="json_output",
         help="Print a machine-readable proof receipt instead of human-readable output.",
+    )
+    demo_output.add_argument(
+        "--markdown",
+        action="store_true",
+        dest="markdown_output",
+        help="Print a copy/pasteable Markdown proof receipt instead of human-readable output.",
+    )
+    demo_output.add_argument(
+        "--html",
+        action="store_true",
+        dest="html_output",
+        help="Print a self-contained HTML proof receipt instead of human-readable output.",
+    )
+    demo_output.add_argument(
+        "--save-html",
+        type=Path,
+        dest="save_html",
+        metavar="PATH",
+        help="Write a self-contained HTML proof receipt to PATH.",
     )
     demo.set_defaults(handler="demo")
 
@@ -729,7 +1056,13 @@ def main(argv: list[str] | None = None) -> int:
     repo_root = Path(__file__).resolve().parents[2]
 
     if args.handler == "demo":
-        return run_demo(repo_root, json_output=args.json_output)
+        return run_demo(
+            repo_root,
+            json_output=args.json_output,
+            markdown_output=args.markdown_output,
+            html_output=args.html_output,
+            save_html=args.save_html,
+        )
 
     config = load_config(repo_root)
 

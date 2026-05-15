@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>knowledge-harness demo hub</title>
+    <style>
+      :root {
+        color-scheme: light;
+        --ink: #171916;
+        --muted: #59635c;
+        --paper: #fbf7ec;
+        --panel: #fffdf8;
+        --line: #d8cdb8;
+        --green: #0f6654;
+        --green-soft: #dfeee7;
+        --rust: #aa4b32;
+        --rust-soft: #f3ded3;
+        --blue: #244e72;
+        --blue-soft: #dde8f1;
+        --shadow: rgba(23, 25, 22, 0.1);
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background:
+          linear-gradient(90deg, rgba(23, 25, 22, 0.045) 1px, transparent 1px),
+          linear-gradient(180deg, rgba(23, 25, 22, 0.04) 1px, transparent 1px),
+          linear-gradient(145deg, rgba(15, 102, 84, 0.1), transparent 42%),
+          linear-gradient(230deg, rgba(170, 75, 50, 0.12), transparent 48%),
+          var(--paper);
+        background-size: 36px 36px, 36px 36px, auto, auto, auto;
+        color: var(--ink);
+        font-family: Charter, "Bitstream Charter", Cambria, Georgia, serif;
+        line-height: 1.55;
+      }
+
+      a {
+        color: inherit;
+      }
+
+      main {
+        width: min(1120px, calc(100% - 32px));
+        margin: 0 auto;
+        padding: 44px 0 56px;
+      }
+
+      .hero {
+        display: grid;
+        grid-template-columns: minmax(0, 1.25fr) minmax(280px, 0.8fr);
+        gap: 28px;
+        align-items: end;
+        padding: 18px 0 32px;
+        border-bottom: 2px solid var(--ink);
+      }
+
+      .eyebrow {
+        margin: 0 0 12px;
+        color: var(--green);
+        font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      h1,
+      h2,
+      h3,
+      p,
+      li {
+        overflow-wrap: anywhere;
+      }
+
+      h1 {
+        margin: 0;
+        max-width: 13ch;
+        font-size: 76px;
+        line-height: 0.94;
+        letter-spacing: 0;
+      }
+
+      .summary {
+        max-width: 70ch;
+        margin: 18px 0 0;
+        color: var(--muted);
+        font-size: 18px;
+      }
+
+      .proof-box {
+        display: grid;
+        gap: 10px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 253, 248, 0.9);
+        box-shadow: 0 18px 46px var(--shadow);
+      }
+
+      .proof-box h2 {
+        margin: 0;
+        font-size: 18px;
+        letter-spacing: 0;
+      }
+
+      .proof-list {
+        display: grid;
+        gap: 8px;
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .proof-list li {
+        display: flex;
+        justify-content: space-between;
+        gap: 14px;
+        padding: 10px 11px;
+        border: 1px solid rgba(23, 25, 22, 0.16);
+        background: #f8f2e5;
+      }
+
+      .proof-list span {
+        color: var(--muted);
+      }
+
+      .proof-list strong {
+        font: 800 13px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        text-align: right;
+      }
+
+      .flow {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 10px;
+        margin-top: 26px;
+      }
+
+      .flow-step {
+        min-height: 132px;
+        padding: 14px;
+        border: 1px solid rgba(23, 25, 22, 0.18);
+        background: rgba(255, 253, 248, 0.72);
+      }
+
+      .flow-step strong {
+        display: block;
+        color: var(--green);
+        font: 800 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .flow-step span {
+        display: block;
+        margin-top: 10px;
+        color: var(--muted);
+      }
+
+      .cards {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: 16px;
+        margin-top: 30px;
+      }
+
+      .card {
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+        min-height: 320px;
+        padding: 20px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: rgba(255, 253, 248, 0.9);
+        box-shadow: 0 16px 38px rgba(23, 25, 22, 0.07);
+        text-decoration: none;
+      }
+
+      .card:nth-child(1) {
+        border-top: 5px solid var(--green);
+      }
+
+      .card:nth-child(2) {
+        border-top: 5px solid var(--blue);
+      }
+
+      .card:nth-child(3) {
+        border-top: 5px solid var(--rust);
+      }
+
+      .card:hover,
+      .card:focus-visible {
+        outline: 2px solid var(--ink);
+        outline-offset: 4px;
+        transform: translateY(-2px);
+      }
+
+      .kicker {
+        margin: 0 0 12px;
+        color: var(--muted);
+        font: 800 12px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        letter-spacing: 0;
+        text-transform: uppercase;
+      }
+
+      .card h2 {
+        margin: 0;
+        font-size: 28px;
+        line-height: 1.05;
+        letter-spacing: 0;
+      }
+
+      .card p {
+        margin: 14px 0 0;
+        color: var(--muted);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        min-height: 36px;
+        width: fit-content;
+        margin-top: 18px;
+        padding: 7px 10px;
+        border: 1px solid rgba(23, 25, 22, 0.2);
+        background: #f7f0e2;
+        font: 800 13px/1.2 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      }
+
+      .note {
+        margin-top: 28px;
+        padding: 22px;
+        border: 2px solid var(--ink);
+        background: #f4efe4;
+      }
+
+      .note h2 {
+        margin: 0;
+        font-size: 34px;
+        line-height: 1;
+        letter-spacing: 0;
+      }
+
+      .note p {
+        max-width: 82ch;
+        margin: 12px 0 0;
+        color: var(--muted);
+      }
+
+      code {
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 0.94em;
+      }
+
+      @media (max-width: 900px) {
+        .hero,
+        .cards,
+        .flow {
+          grid-template-columns: 1fr;
+        }
+
+        h1 {
+          max-width: 100%;
+          font-size: 54px;
+        }
+
+        .card {
+          min-height: 0;
+        }
+      }
+
+      @media (max-width: 560px) {
+        main {
+          width: min(100% - 20px, 1120px);
+          padding: 22px 0 38px;
+        }
+
+        h1 {
+          font-size: 42px;
+        }
+
+        .summary {
+          font-size: 17px;
+        }
+
+        .proof-list li {
+          display: grid;
+        }
+
+        .proof-list strong {
+          text-align: left;
+        }
+
+        .card,
+        .note,
+        .proof-box {
+          padding: 16px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section class="hero" aria-labelledby="hub-title">
+        <div>
+          <p class="eyebrow">Public-safe demo hub</p>
+          <h1 id="hub-title">Open one file, see the proof path.</h1>
+          <p class="summary">
+            <code>knowledge-harness</code> can assemble an AI prompt from a tiny
+            fake Obsidian-like vault, write evidence files, and stop before Codex
+            or any real vault is touched. These three static pages are the
+            browser entry points for that claim.
+          </p>
+        </div>
+
+        <aside class="proof-box" aria-labelledby="claim-title">
+          <h2 id="claim-title">What this proves</h2>
+          <ul class="proof-list">
+            <li><span>Vault content</span><strong>fake only</strong></li>
+            <li><span>Prompt assembly</span><strong>shown</strong></li>
+            <li><span>Codex invocation</span><strong>not required</strong></li>
+            <li><span>Private files</span><strong>not included</strong></li>
+          </ul>
+        </aside>
+      </section>
+
+      <section class="flow" aria-label="Proof flow">
+        <div class="flow-step">
+          <strong>1. Fake vault</strong>
+          <span>Only public contract files are used: agent rules, prompt rules, and a tiny wiki index.</span>
+        </div>
+        <div class="flow-step">
+          <strong>2. Dry-run prompt</strong>
+          <span>The harness assembles the prompt and records metadata without starting Codex.</span>
+        </div>
+        <div class="flow-step">
+          <strong>3. Receipt</strong>
+          <span>The output points to the prompt and metadata so a reviewer can check the claim from files.</span>
+        </div>
+      </section>
+
+      <section class="cards" aria-label="Demo pages">
+        <a class="card" href="one-minute-demo.html">
+          <div>
+            <p class="kicker">Start here</p>
+            <h2>One-minute demo</h2>
+            <p>
+              The fastest no-install walkthrough. It shows the exact demo command,
+              what files to inspect, and how to clean up the temporary proof files.
+            </p>
+          </div>
+          <span class="badge">Open one-minute-demo.html</span>
+        </a>
+
+        <a class="card" href="visitor-tour.html">
+          <div>
+            <p class="kicker">Full picture</p>
+            <h2>90-second visitor tour</h2>
+            <p>
+              A fuller static tour of the fake vault, dry-run prompt assembly,
+              run metadata, receipt formats, and private-data boundary.
+            </p>
+          </div>
+          <span class="badge">Open visitor-tour.html</span>
+        </a>
+
+        <a class="card" href="demo-receipt.html">
+          <div>
+            <p class="kicker">Sample output</p>
+            <h2>Demo receipt</h2>
+            <p>
+              A committed sample of the HTML receipt produced by
+              <code>knowledge-harness demo --html</code>, with safety flags and
+              evidence paths filled in using public sample values.
+            </p>
+          </div>
+          <span class="badge">Open demo-receipt.html</span>
+        </a>
+      </section>
+
+      <section class="note" aria-labelledby="boundary-title">
+        <h2 id="boundary-title">The repo stays public-safe</h2>
+        <p>
+          This hub is static HTML with inline CSS only. It has no scripts, no
+          network calls, no real Obsidian vault content, no private local paths,
+          no tokens, and no personal contact data.
+        </p>
+      </section>
+    </main>
+  </body>
+</html>
