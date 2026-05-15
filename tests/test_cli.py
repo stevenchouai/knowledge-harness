@@ -173,6 +173,7 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             self.assertTrue((run_path / "prompt.txt").exists())
 
             metadata = json.loads((run_path / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["schema_version"], 1)
             self.assertTrue(metadata["dry_run"])
             self.assertEqual(metadata["language"], "zh")
             self.assertEqual(metadata["model"], "test-model")
@@ -233,6 +234,7 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             self.assertEqual(len(run_dirs), 1)
             self.assertFalse((run_dirs[0] / "last_message.txt").exists())
             metadata = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["schema_version"], 1)
             self.assertTrue(metadata["dry_run"])
             self.assertFalse(metadata["write_output"])
             self.assertEqual(metadata["language"], "en")
@@ -531,6 +533,7 @@ class RunQueryDryRunValidationTests(unittest.TestCase):
             run_dirs = list(config.run_dir.iterdir())
             self.assertEqual(len(run_dirs), 1)
             metadata = json.loads((run_dirs[0] / "run.json").read_text(encoding="utf-8"))
+            self.assertEqual(metadata["schema_version"], 1)
             self.assertEqual(metadata["exit_code"], 7)
             self.assertFalse(metadata["dry_run"])
             self.assertEqual(metadata["question"], "What should the harness do next?")
